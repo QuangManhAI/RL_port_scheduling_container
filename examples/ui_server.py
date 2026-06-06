@@ -172,6 +172,7 @@ class SimulationSession:
             "unloadedCount": ship.unloaded_count,
             "containerCount": len(ship.containers),
             "remaining": len(ship.containers) - ship.unloaded_count,
+            "containers": [self._container_payload(c) for c in ship.containers],
         }
 
     def _crane_payload(self, crane: Any) -> dict[str, Any]:

@@ -102,7 +102,8 @@ export class PortScene {
 
   setOptions(options) {
     this.options = { ...this.options, ...options };
-    if (this.portState) this.render(this.portState, this.selectedAction);
+    // Don't interrupt active transitions
+    if (this.portState && !this.transition) this.render(this.portState, this.selectedAction);
   }
 
   setCamera(mode) {
@@ -116,8 +117,8 @@ export class PortScene {
   render(portState, selectedAction, transition = null) {
     this.portState = portState;
     this.selectedAction = selectedAction;
-    if (transition && this.options.animation && transition.previous?.currentContainer) {
-      this.startTransition(transition.previous, portState, selectedAction, transition.container);
+    if (transition && this.options.animation && transition.container) {
+      this.startTransition(transition.previous, portState, transition.action, transition.container);
       return;
     }
     this.renderCommitted(portState, selectedAction);
@@ -137,7 +138,7 @@ export class PortScene {
   }
 
   startTransition(previousState, nextState, action, container) {
-    this.renderCommitted(previousState, action);
+    this.renderCommitted(previousState, this.selectedAction);
     const targetCoords = coordsForAction(previousState.config, action);
     const path = this.buildContainerPath(previousState, action, container);
     const color = this.containerColor(container?.type);
@@ -173,14 +174,19 @@ export class PortScene {
       agv,
     };
 
-    // Hide static trolleys of active cranes to avoid overlapping with dynamic trolley
+    // Hide static trolleys of active cranes and move yard crane to lane start position
+    const laneZ = -0.2;
     this.dynamicGroup.children.forEach((child) => {
       if (child.userData.staticTrolley) {
-        if (child.userData.isYardCrane && child.userData.block === targetCoords.block) {
+        if (child.userData.isYardCrane) {
           child.userData.staticTrolley.visible = false;
+          // Start the crane at lane Z so it visibly rolls to the target bay
+          child.position.z = laneZ;
+          // Also move crane X to the target block
+          const targetX = LAYOUT.yardBaseX + targetCoords.block * LAYOUT.blockGap + ((this.portState?.config?.stacks || 3) - 1) * LAYOUT.stackGap / 2;
+          child.position.x = targetX;
         }
         if (!child.userData.isYardCrane && path[0][0] < -1.0) {
-          // Quay crane
           child.userData.staticTrolley.visible = false;
         }
       }
@@ -198,29 +204,15 @@ export class PortScene {
     const quayHoistY = 3.9; // Safe height below Quay crane trolley
     const yardHoistY = 3.2; // Safe height below Yard crane trolley
 
-    // Orthogonal movement: Up, Across, Down.
-    if (container?.type === "export") {
-      return [
-        [target.x, targetY, target.z],      // 0: in stack
-        [target.x, yardHoistY, target.z],   // 1: hoist up
-        [target.x, yardHoistY, laneZ],      // 2: yard trolley to lane
-        [target.x, laneY, laneZ],           // 3: lower to AGV
-        [source[0], laneY, laneZ],          // 4: AGV drive to quay
-        [source[0], quayHoistY, laneZ],     // 5: hoist up from AGV
-        [source[0], quayHoistY, source[2]], // 6: quay trolley to ship
-        [source[0], source[1], source[2]]   // 7: lower to ship
-      ];
-    }
-    
-    // Import or Transshipment
+    // All containers go: Ship → Quay Crane → AGV → Yard Crane → Stack
     return [
       [source[0], source[1], source[2]],    // 0: on ship
-      [source[0], quayHoistY, source[2]],   // 1: hoist up
-      [source[0], quayHoistY, laneZ],       // 2: quay trolley to lane
-      [source[0], laneY, laneZ],            // 3: lower to AGV
-      [target.x, laneY, laneZ],             // 4: AGV drive to yard
-      [target.x, yardHoistY, laneZ],        // 5: hoist up from AGV
-      [target.x, yardHoistY, target.z],     // 6: yard trolley to stack
+      [source[0], quayHoistY, source[2]],   // 1: quay crane hoists up
+      [source[0], quayHoistY, laneZ],       // 2: quay trolley moves to lane
+      [source[0], laneY, laneZ],            // 3: lower onto AGV
+      [target.x, laneY, laneZ],             // 4: AGV drives to yard
+      [target.x, yardHoistY, laneZ],        // 5: yard crane hoists up
+      [target.x, yardHoistY, target.z],     // 6: yard crane rolls to bay
       [target.x, targetY, target.z]         // 7: lower into stack
     ];
   }
@@ -257,7 +249,7 @@ export class PortScene {
     // Move the Yard Crane's entire gantry along the Z axis to follow the transition
     if (!isQuayPhase) {
       this.dynamicGroup.children.forEach((child) => {
-        if (child.userData.isYardCrane && child.userData.block === this.transition.targetBlock) {
+        if (child.userData.isYardCrane) {
           child.position.z = point[2];
         }
       });
@@ -362,7 +354,9 @@ export class PortScene {
       position: [-9.4, -0.1, -7.5],
       scale: 1,
       color: COLORS.hull,
+      containers: berthed?.containers || [],
       remaining: berthed?.remaining || 0,
+      unloadedCount: berthed?.unloadedCount || 0,
       label: `Ship ${berthed?.id || 1}`,
     }));
 
@@ -373,13 +367,15 @@ export class PortScene {
         position: [-9.4, -0.12, -13.0],
         scale: 0.65,
         color: COLORS.hullAlt,
-        remaining: waiting.remaining,
+        containers: waiting.containers || [],
+        remaining: waiting.remaining || 0,
+        unloadedCount: waiting.unloadedCount || 0,
         label: `Ship ${waiting.id} (waiting)`,
       }));
     }
   }
 
-  buildShip({ position, scale, color, remaining, label }) {
+  buildShip({ position, scale, color, containers, remaining, unloadedCount, label }) {
     const group = new THREE.Group();
     group.position.set(...position);
     group.scale.setScalar(scale);
@@ -403,15 +399,35 @@ export class PortScene {
     group.add(this.box([0.45, 0.9, 0.5], [-6.0, hullHeight + 1.7, 0], this.material(0xcc3333, 0.6)));
 
     // Containers on deck
-    for (let i = 0; i < remaining; i += 1) {
-      const colorCycle = [COLORS.import, COLORS.export, COLORS.transshipment][i % 3];
-      const col = i % 2;
-      const row = Math.floor(i / 2) % 6;
-      const tier = Math.floor(i / 12);
-      const cx = -3.0 + row * 1.15;
-      const cy = hullHeight + 0.36 + tier * 0.58;
-      const cz = -0.5 + col * 1.0;
-      group.add(this.box([1.0, 0.5, 0.8], [cx, cy, cz], this.material(colorCycle, 0.7, 0.06)));
+    if (containers && containers.length > 0) {
+      containers.forEach((container, i) => {
+        if (i < unloadedCount) {
+          // Skip already unloaded containers
+          return;
+        }
+        if (!container) return;
+        const containerColor = this.containerColor(container.type);
+        const col = i % 2;
+        const row = Math.floor(i / 2) % 6;
+        const tier = Math.floor(i / 12);
+        const cx = -3.0 + row * 1.15;
+        const cy = hullHeight + 0.36 + tier * 0.58;
+        const cz = -0.5 + col * 1.0;
+        group.add(this.box([1.0, 0.5, 0.8], [cx, cy, cz], this.material(containerColor, 0.7, 0.06)));
+      });
+    } else {
+      // Fallback: render using remaining count and cycle colors
+      const count = remaining || 0;
+      for (let i = 0; i < count; i += 1) {
+        const colorCycle = [COLORS.import, COLORS.export, COLORS.transshipment][i % 3];
+        const col = i % 2;
+        const row = Math.floor(i / 2) % 6;
+        const tier = Math.floor(i / 12);
+        const cx = -3.0 + row * 1.15;
+        const cy = hullHeight + 0.36 + tier * 0.58;
+        const cz = -0.5 + col * 1.0;
+        group.add(this.box([1.0, 0.5, 0.8], [cx, cy, cz], this.material(colorCycle, 0.7, 0.06)));
+      }
     }
 
     if (this.options.labels) group.add(this.labelSprite(label, [6, 2.0, -2.0]));
@@ -428,15 +444,14 @@ export class PortScene {
     const targetCoords = coordsForAction(portState.config, selectedAction);
 
     portState.cranes.filter((crane) => crane.kind === "yard").forEach((crane, index) => {
-      const block = index % portState.config.blocks;
+      // The yard crane serves whichever block is targeted
+      const block = targetCoords.block;
       const x = LAYOUT.yardBaseX + block * LAYOUT.blockGap + ((portState.config.stacks - 1) * LAYOUT.stackGap) / 2;
       
-      // Move the crane exactly to the bay where the action occurs
-      const bay = (block === targetCoords.block) ? targetCoords.bay : 0;
+      const bay = targetCoords.bay;
       const z = LAYOUT.yardBaseZ + bay * LAYOUT.bayGap;
 
-      const isTargetBlock = (block === targetCoords.block);
-      const trolleyWorldX = isTargetBlock ? LAYOUT.yardBaseX + targetCoords.block * LAYOUT.blockGap + targetCoords.stack * LAYOUT.stackGap : x;
+      const trolleyWorldX = LAYOUT.yardBaseX + block * LAYOUT.blockGap + targetCoords.stack * LAYOUT.stackGap;
       const trolleyLocalX = trolleyWorldX - x;
 
       const craneGroup = this.buildYardCrane(x, z, crane, trolleyLocalX);
@@ -492,7 +507,10 @@ export class PortScene {
     trolleyGroup.add(this.box([1.1, 0.1, 0.8], [0, spreaderY, trolleyZ], this.material(0xd5dde1, 0.3, 0.5)));
 
     if (!crane.available) {
-      trolleyGroup.add(this.box(LAYOUT.containerSize, [0, spreaderY - 0.3, trolleyZ], this.material(COLORS.import)));
+      const containerColor = this.portState?.currentContainer
+        ? this.containerColor(this.portState.currentContainer.type)
+        : COLORS.import;
+      trolleyGroup.add(this.box(LAYOUT.containerSize, [0, spreaderY - 0.3, trolleyZ], this.material(containerColor)));
     }
     
     group.add(trolleyGroup);
@@ -537,7 +555,10 @@ export class PortScene {
     trolleyGroup.add(this.box([1.1, 0.1, 0.8], [trolleyX, spreaderY, 0], this.material(0xd5dde1, 0.3, 0.5)));
 
     if (!crane.available) {
-      trolleyGroup.add(this.box(LAYOUT.containerSize, [trolleyX, spreaderY - 0.3, 0], this.material(COLORS.export)));
+      const containerColor = this.portState?.currentContainer
+        ? this.containerColor(this.portState.currentContainer.type)
+        : COLORS.import;
+      trolleyGroup.add(this.box(LAYOUT.containerSize, [trolleyX, spreaderY - 0.3, 0], this.material(containerColor)));
     }
     
     group.add(trolleyGroup);
@@ -756,27 +777,12 @@ export class PortScene {
 function samplePath(path, progress) {
   if (!path.length) return null;
   if (path.length === 1) return path[0];
-  
-  // Calculate total distance to make the container move at a uniform speed
-  let totalDist = 0;
-  const dists = [];
-  for (let i = 0; i < path.length - 1; i++) {
-    const d = Math.hypot(path[i+1][0] - path[i][0], path[i+1][1] - path[i][1], path[i+1][2] - path[i][2]);
-    totalDist += d;
-    dists.push(d);
-  }
-  
-  const targetDist = progress * totalDist;
-  let currentDist = 0;
-  
-  for (let i = 0; i < dists.length; i++) {
-    if (currentDist + dists[i] >= targetDist || i === dists.length - 1) {
-      const localProgress = dists[i] > 0 ? (targetDist - currentDist) / dists[i] : 0;
-      return lerpPoint(path[i], path[i+1], Math.max(0, Math.min(1, localProgress)));
-    }
-    currentDist += dists[i];
-  }
-  return path[path.length - 1];
+  // Segment-based: each segment gets equal time so all phases are clearly visible
+  const segmentCount = path.length - 1;
+  const scaled = progress * segmentCount;
+  const index = Math.min(segmentCount - 1, Math.floor(scaled));
+  const local = scaled - index;
+  return lerpPoint(path[index], path[index + 1], local);
 }
 
 function lerpPoint(a, b, t) {

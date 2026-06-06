@@ -71,19 +71,17 @@ async function stepOnce() {
   if (state.stepping) return;
   state.stepping = true;
   const previous = state.port;
-  const selectedBeforeStep = state.selectedAction;
   try {
     state.raw = await requestJson("/api/step", {
       action: state.selectedAction,
       mode: els.modeSelect.value,
     });
     state.port = adaptPortState(state.raw);
-    if (state.port.lastAction !== null) {
-      state.selectedAction = state.port.lastAction;
-    }
+    const executedAction = state.port.lastAction !== null ? state.port.lastAction : state.selectedAction;
+    state.selectedAction = executedAction;
     render({
       previous,
-      action: selectedBeforeStep,
+      action: executedAction,
       container: previous?.currentContainer || null,
     });
     if (state.port.done) stopRun();
