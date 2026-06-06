@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Smart Port RL Digital Twin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <!-- Background 3D Scene -->
+    <div id="scene3d" class="scene3d-background" aria-label="3D port scene">
+      <div id="sceneTooltip" class="scene-tooltip glass-panel" hidden></div>
+    </div>
+
+    <!-- UI Overlay -->
+    <main class="app-overlay">
+      <section class="left-panel glass-panel scrollable">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">RL Port Scheduling</p>
+            <h1>Smart Port Twin</h1>
+          </div>
+        </header>
+
+        <div id="kpiStrip" class="kpi-strip" aria-label="Simulation KPIs"></div>
+
+        <section class="control-bar glass-inner">
+          <div class="control-group">
+            <button id="resetBtn" class="button secondary">Reset</button>
+            <button id="stepBtn" class="button primary">Step</button>
+            <button id="runBtn" class="button secondary">Run</button>
+          </div>
+          
+          <div class="control-row">
+            <label class="field">
+              <span>Mode</span>
+              <select id="modeSelect">
+                <option value="manual">Manual stack</option>
+                <option value="heuristic">Heuristic</option>
+                <option value="random">Random</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Speed</span>
+              <input id="speedInput" type="range" min="120" max="1200" step="40" value="420" />
+            </label>
+          </div>
+
+          <div class="segmented-control" aria-label="Camera controls">
+            <button class="camera-btn active" data-camera="overview">Overview</button>
+            <button class="camera-btn" data-camera="follow">Follow</button>
+            <button class="camera-btn" data-camera="crane">Crane</button>
+            <button class="camera-btn" data-camera="yard">Yard</button>
+          </div>
+          
+          <div class="toggle-row">
+            <label class="checkbox-label"><input id="labelsToggle" type="checkbox" checked /> Labels</label>
+            <label class="checkbox-label"><input id="pathsToggle" type="checkbox" checked /> Paths</label>
+            <label class="checkbox-label"><input id="heatmapToggle" type="checkbox" checked /> Heatmap</label>
+            <label class="checkbox-label"><input id="animationToggle" type="checkbox" checked /> Anim</label>
+          </div>
+        </section>
+
+        <div class="legend glass-inner">
+          <span><i class="legend-box import"></i>Import</span>
+          <span><i class="legend-box export"></i>Export</span>
+          <span><i class="legend-box transshipment"></i>Trans</span>
+        </div>
+
+        <section id="yardView" class="yard-view" aria-label="Container yard"></section>
+      </section>
+
+      <aside class="right-panel scrollable">
+        <section class="glass-panel">
+          <h2>Current Decision</h2>
+          <div id="currentDecision" class="decision-card muted glass-inner">No container waiting</div>
+        </section>
+
+        <section class="glass-panel">
+          <h2>Ships</h2>
+          <div id="shipList" class="ship-list"></div>
+        </section>
+
+        <section class="glass-panel">
+          <h2>Cranes</h2>
+          <div id="craneList" class="crane-list"></div>
+        </section>
+
+        <section class="glass-panel">
+          <h2>Reward Breakdown</h2>
+          <div id="rewardBreakdown" class="breakdown-list"></div>
+        </section>
+
+        <section class="glass-panel log-panel">
+          <h2>Event Log</h2>
+          <div id="eventLog" class="event-log glass-inner"></div>
+        </section>
+      </aside>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
