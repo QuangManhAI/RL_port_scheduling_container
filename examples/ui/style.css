@@ -74,6 +74,10 @@ button {
   border-radius: 8px;
 }
 
+.scene-tooltip[hidden] {
+  display: none !important;
+}
+
 .scene-tooltip strong {
   color: #fff;
   margin-bottom: 4px;

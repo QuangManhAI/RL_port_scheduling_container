@@ -32,6 +32,7 @@ const els = {
   pathsToggle: document.querySelector("#pathsToggle"),
   heatmapToggle: document.querySelector("#heatmapToggle"),
   animationToggle: document.querySelector("#animationToggle"),
+  animSpeed: document.querySelector("#animSpeed"),
   cameraButtons: [...document.querySelectorAll(".camera-btn")],
 };
 
@@ -101,8 +102,9 @@ async function scheduleNextRunStep() {
   if (!state.running) return;
   await stepOnce();
   if (!state.running || state.port?.done) return;
+  const animDuration = els.animSpeed ? Number(els.animSpeed.value) : 2500;
   const delay = els.animationToggle.checked
-    ? Math.max(Number(els.speedInput.value), 1550)
+    ? Math.max(Number(els.speedInput.value), animDuration + 50)
     : Number(els.speedInput.value);
   state.timer = window.setTimeout(scheduleNextRunStep, delay);
 }
@@ -122,6 +124,7 @@ function syncSceneOptions() {
     paths: els.pathsToggle.checked,
     heatmap: els.heatmapToggle.checked,
     animation: els.animationToggle.checked,
+    animSpeed: els.animSpeed ? parseInt(els.animSpeed.value) : 1,
   });
 }
 
@@ -136,8 +139,8 @@ els.speedInput.addEventListener("input", () => {
   stopRun();
   startRun();
 });
-[els.labelsToggle, els.pathsToggle, els.heatmapToggle, els.animationToggle].forEach((input) => {
-  input.addEventListener("change", syncSceneOptions);
+[els.labelsToggle, els.pathsToggle, els.heatmapToggle, els.animationToggle, els.animSpeed].forEach((input) => {
+  if (input) input.addEventListener("change", syncSceneOptions);
 });
 els.cameraButtons.forEach((button) => {
   button.addEventListener("click", () => {

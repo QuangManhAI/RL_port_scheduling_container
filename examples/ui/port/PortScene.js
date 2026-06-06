@@ -137,6 +137,7 @@ export class PortScene {
 
   startTransition(previousState, nextState, action, container) {
     this.renderCommitted(previousState, action);
+    const targetCoords = coordsForAction(previousState.config, action);
     const path = this.buildContainerPath(previousState, action, container);
     const color = this.containerColor(container?.type);
     
@@ -159,16 +160,30 @@ export class PortScene {
     
     this.transition = {
       start: performance.now(),
-      duration: 3000, // slower, more realistic duration
+      duration: this.options.animSpeed || 2500,
       path,
       action,
       nextState,
+      targetBlock: targetCoords.block,
       movingContainer,
       spreader,
       cableGroup,
       trolley,
       agv,
     };
+
+    // Hide static trolleys of active cranes to avoid overlapping with dynamic trolley
+    this.dynamicGroup.children.forEach((child) => {
+      if (child.userData.staticTrolley) {
+        if (child.userData.isYardCrane && child.userData.block === targetCoords.block) {
+          child.userData.staticTrolley.visible = false;
+        }
+        if (!child.userData.isYardCrane && path[0][0] < -1.0) {
+          // Quay crane
+          child.userData.staticTrolley.visible = false;
+        }
+      }
+    });
   }
 
   buildContainerPath(portState, action, container) {
@@ -179,8 +194,8 @@ export class PortScene {
     const source = [-9.4, 2.2, -5.2];
     const laneZ = -0.2;
     const laneY = 1.02; // Height on the truck
-    const quayHoistY = 5.0; // Quay crane hoist height
-    const yardHoistY = 4.0; // Yard crane hoist height
+    const quayHoistY = 3.9; // Safe height below Quay crane trolley
+    const yardHoistY = 2.8; // Safe height below Yard crane trolley
 
     // Orthogonal movement: Up, Across, Down.
     if (container?.type === "export") {
@@ -233,11 +248,20 @@ export class PortScene {
     
     // Determine which crane is hoisting based on X position to set top height
     const isQuayPhase = point[0] < -1.0; 
-    const hoistTopY = isQuayPhase ? 4.28 : 3.02; // Matching crane beam heights
+    const hoistTopY = isQuayPhase ? 4.54 : 3.32; // Exact absolute Y coordinates of the crane beams
     
     // Position dynamic trolley
     this.transition.trolley.position.set(point[0], hoistTopY, point[2]);
     
+    // Move the Yard Crane's entire gantry along the Z axis to follow the transition
+    if (!isQuayPhase) {
+      this.dynamicGroup.children.forEach((child) => {
+        if (child.userData.isYardCrane && child.userData.block === this.transition.targetBlock) {
+          child.position.z = point[2];
+        }
+      });
+    }
+
     // Dynamic Cables
     const cableLength = Math.max(0.01, hoistTopY - spreaderY);
     const cableCenterY = spreaderY + cableLength / 2;
@@ -380,7 +404,8 @@ export class PortScene {
 
   addCranes(portState, selectedAction) {
     portState.cranes.filter((crane) => crane.kind === "quay").forEach((crane, index) => {
-      this.dynamicGroup.add(this.buildQuayCrane(-9.6 + index * 3.6, -2.3, crane));
+      const craneGroup = this.buildQuayCrane(-9.6 + index * 3.6, -2.3, crane);
+      this.dynamicGroup.add(craneGroup);
     });
 
     // Find where the action is happening
@@ -390,11 +415,18 @@ export class PortScene {
       const block = index % portState.config.blocks;
       const x = LAYOUT.yardBaseX + block * LAYOUT.blockGap + ((portState.config.stacks - 1) * LAYOUT.stackGap) / 2;
       
-      // Move the crane exactly to the bay where the action occurs, so it looks like it's doing the work
+      // Move the crane exactly to the bay where the action occurs
       const bay = (block === targetCoords.block) ? targetCoords.bay : 0;
       const z = LAYOUT.yardBaseZ + bay * LAYOUT.bayGap;
 
-      this.dynamicGroup.add(this.buildYardCrane(x, z, crane));
+      const isTargetBlock = (block === targetCoords.block);
+      const trolleyWorldX = isTargetBlock ? LAYOUT.yardBaseX + targetCoords.block * LAYOUT.blockGap + targetCoords.stack * LAYOUT.stackGap : x;
+      const trolleyLocalX = trolleyWorldX - x;
+
+      const craneGroup = this.buildYardCrane(x, z, crane, trolleyLocalX);
+      craneGroup.userData.isYardCrane = true;
+      craneGroup.userData.block = block;
+      this.dynamicGroup.add(craneGroup);
     });
   }
 
@@ -436,21 +468,25 @@ export class PortScene {
 
     const spreaderY = wireY - wireLength / 2 - 0.05;
     
-    // We omit the trolley/spreader if it's available so the dynamic transition trolley can take over.
+    const trolleyGroup = new THREE.Group();
+    trolleyGroup.add(this.box([1.1, 0.45, 0.9], [0, 4.28, trolleyZ], dark)); // Static Trolley
+    [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]].forEach(([wx, wz]) => {
+      trolleyGroup.add(this.box([0.02, wireLength, 0.02], [wx, wireY, trolleyZ + wz], dark));
+    });
+    trolleyGroup.add(this.box([1.1, 0.1, 0.8], [0, spreaderY, trolleyZ], this.material(0xd5dde1, 0.3, 0.5)));
+
     if (!crane.available) {
-      group.add(this.box([1.1, 0.45, 0.9], [0, 4.28, trolleyZ], dark)); // Static Trolley
-      [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]].forEach(([wx, wz]) => {
-        group.add(this.box([0.02, wireLength, 0.02], [wx, wireY, trolleyZ + wz], dark));
-      });
-      group.add(this.box([1.1, 0.1, 0.8], [0, spreaderY, trolleyZ], this.material(0xd5dde1, 0.3, 0.5)));
-      group.add(this.box(LAYOUT.containerSize, [0, spreaderY - 0.3, trolleyZ], this.material(COLORS.import)));
+      trolleyGroup.add(this.box(LAYOUT.containerSize, [0, spreaderY - 0.3, trolleyZ], this.material(COLORS.import)));
     }
+    
+    group.add(trolleyGroup);
+    group.userData.staticTrolley = trolleyGroup;
     
     if (this.options.labels) group.add(this.labelSprite(crane.name, [0, 5.8, 0]));
     return group;
   }
 
-  buildYardCrane(x, z, crane) {
+  buildYardCrane(x, z, crane, trolleyX = 0) {
     const group = new THREE.Group();
     group.position.set(x, 0.3, z);
     const steel = this.material(COLORS.yardCrane, 0.44, 0.24);
@@ -471,30 +507,25 @@ export class PortScene {
       wheel2.position.set(lx, 0, lz + 0.2);
       group.add(wheel1, wheel2);
     });
-
-    const trolleyX = crane.available ? -0.65 : 1.15;
-    
-    // Trolley
-    group.add(this.box([0.9, 0.36, 0.9], [trolleyX, 3.02, 0], dark));
     
     // Cables (4 thin cables)
     const wireLength = 1.4;
     const wireY = 2.3;
-    [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]].forEach(([wx, wz]) => {
-      group.add(this.box([0.02, wireLength, 0.02], [trolleyX + wx, wireY, wz], dark));
-    });
-
     const spreaderY = wireY - wireLength / 2 - 0.05;
 
-    // We omit the trolley/spreader if it's available so the dynamic transition trolley can take over.
+    const trolleyGroup = new THREE.Group();
+    trolleyGroup.add(this.box([0.9, 0.36, 0.9], [trolleyX, 3.02, 0], dark)); // Static Trolley
+    [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]].forEach(([wx, wz]) => {
+      trolleyGroup.add(this.box([0.02, wireLength, 0.02], [trolleyX + wx, wireY, wz], dark));
+    });
+    trolleyGroup.add(this.box([1.1, 0.1, 0.8], [trolleyX, spreaderY, 0], this.material(0xd5dde1, 0.3, 0.5)));
+
     if (!crane.available) {
-      group.add(this.box([0.9, 0.36, 0.9], [trolleyX, 3.02, 0], dark)); // Static Trolley
-      [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]].forEach(([wx, wz]) => {
-        group.add(this.box([0.02, wireLength, 0.02], [trolleyX + wx, wireY, wz], dark));
-      });
-      group.add(this.box([1.1, 0.1, 0.8], [trolleyX, spreaderY, 0], this.material(0xd5dde1, 0.3, 0.5)));
-      group.add(this.box(LAYOUT.containerSize, [trolleyX, spreaderY - 0.3, 0], this.material(COLORS.export)));
+      trolleyGroup.add(this.box(LAYOUT.containerSize, [trolleyX, spreaderY - 0.3, 0], this.material(COLORS.export)));
     }
+    
+    group.add(trolleyGroup);
+    group.userData.staticTrolley = trolleyGroup;
     
     if (this.options.labels) group.add(this.labelSprite(crane.name, [0, 4.3, 0]));
     return group;
@@ -543,9 +574,7 @@ export class PortScene {
   }
 
   addAgvFleet(portState) {
-    const active = portState.currentContainer;
-    this.dynamicGroup.add(this.buildAgv(-2.8 + (portState.time % 5) * 1.5, -0.22, this.containerColor(active?.type)));
-    this.dynamicGroup.add(this.buildAgv(7.8 - (portState.time % 4) * 1.2, 0.55, COLORS.export));
+    // Disabled decorative AGVs because they caused confusing visual overlaps
   }
 
   buildAgv(x, z, loadColor = COLORS.import) {
@@ -711,11 +740,27 @@ export class PortScene {
 function samplePath(path, progress) {
   if (!path.length) return null;
   if (path.length === 1) return path[0];
-  const segmentCount = path.length - 1;
-  const scaled = progress * segmentCount;
-  const index = Math.min(segmentCount - 1, Math.floor(scaled));
-  const local = scaled - index;
-  return lerpPoint(path[index], path[index + 1], local);
+  
+  // Calculate total distance to make the container move at a uniform speed
+  let totalDist = 0;
+  const dists = [];
+  for (let i = 0; i < path.length - 1; i++) {
+    const d = Math.hypot(path[i+1][0] - path[i][0], path[i+1][1] - path[i][1], path[i+1][2] - path[i][2]);
+    totalDist += d;
+    dists.push(d);
+  }
+  
+  const targetDist = progress * totalDist;
+  let currentDist = 0;
+  
+  for (let i = 0; i < dists.length; i++) {
+    if (currentDist + dists[i] >= targetDist || i === dists.length - 1) {
+      const localProgress = dists[i] > 0 ? (targetDist - currentDist) / dists[i] : 0;
+      return lerpPoint(path[i], path[i+1], Math.max(0, Math.min(1, localProgress)));
+    }
+    currentDist += dists[i];
+  }
+  return path[path.length - 1];
 }
 
 function lerpPoint(a, b, t) {
