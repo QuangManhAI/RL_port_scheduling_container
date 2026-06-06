@@ -26,9 +26,9 @@ const COLORS = {
 
 const LAYOUT = {
   yardBaseX: 1.8,
-  yardBaseZ: -2.6,
+  yardBaseZ: 2.2,
   blockGap: 5.3,
-  bayGap: 1.72,
+  bayGap: 2.0,
   stackGap: 1.34,
   tierHeight: 0.62,
   containerSize: [1.08, 0.56, 0.9],
@@ -39,6 +39,7 @@ const CAMERA_PRESETS = {
   follow: { pos: [4.5, 7.6, 8.2], target: [1.8, 1.2, -1.2] },
   crane: { pos: [-10.5, 8.4, 4.8], target: [-8.6, 2.8, -2.3] },
   yard: { pos: [8.7, 10.5, 5.1], target: [5.2, 1.0, 0.8] },
+  ship: { pos: [3.0, 4.5, -8.0], target: [3.0, 1.5, 0.0] },
 };
 
 export class PortScene {
@@ -191,11 +192,11 @@ export class PortScene {
     const currentTier = portState.stacks.find((stack) => stack.action === action)?.filled || 0;
     const targetY = 0.72 + currentTier * LAYOUT.tierHeight;
     
-    const source = [-9.4, 2.2, -5.2];
+    const source = [-9.4, 2.2, -7.5];
     const laneZ = -0.2;
     const laneY = 1.02; // Height on the truck
     const quayHoistY = 3.9; // Safe height below Quay crane trolley
-    const yardHoistY = 2.8; // Safe height below Yard crane trolley
+    const yardHoistY = 3.2; // Safe height below Yard crane trolley
 
     // Orthogonal movement: Up, Across, Down.
     if (container?.type === "export") {
@@ -358,7 +359,7 @@ export class PortScene {
     const berthed = portState.ships.find((ship) => ship.arrived && !ship.departed) || portState.ships[0];
     this.dynamicGroup.add(this.buildShip({
       id: berthed?.id || 1,
-      position: [-17.5, 0.08, -5.4],
+      position: [-9.4, -0.1, -7.5],
       scale: 1,
       color: COLORS.hull,
       remaining: berthed?.remaining || 0,
@@ -369,11 +370,11 @@ export class PortScene {
     if (waiting) {
       this.dynamicGroup.add(this.buildShip({
         id: waiting.id,
-        position: [-28, 0.04, 7.9],
-        scale: 0.72,
+        position: [-9.4, -0.12, -13.0],
+        scale: 0.65,
         color: COLORS.hullAlt,
         remaining: waiting.remaining,
-        label: `Ship ${waiting.id} waiting`,
+        label: `Ship ${waiting.id} (waiting)`,
       }));
     }
   }
@@ -384,21 +385,36 @@ export class PortScene {
     group.scale.setScalar(scale);
     group.userData.floatBaseY = position[1];
 
-    group.add(this.box([10.6, 1.12, 3.5], [0, 0.75, 0], this.material(color, 0.62, 0.14)));
-    const bow = new THREE.Mesh(new THREE.ConeGeometry(1.75, 2.35, 4), this.material(color, 0.62, 0.14));
-    bow.rotation.z = Math.PI / 2;
-    bow.rotation.y = Math.PI / 4;
-    bow.position.set(5.85, 0.75, 0);
-    bow.castShadow = true;
-    group.add(bow);
-    group.add(this.box([7.9, 0.28, 2.78], [-0.9, 1.45, 0], this.material(COLORS.deck, 0.76)));
-    group.add(this.box([1.45, 1.15, 1.75], [-3.5, 2.05, 0], this.material(0xf2f6ef, 0.58)));
-    group.add(this.box([0.9, 0.18, 1.15], [-3.5, 2.74, 0], this.material(0x34454d, 0.5)));
+    const hullMat = this.material(color, 0.62, 0.14);
+
+    // Simple hull - just a long box
+    const hullLength = 14;
+    const hullHeight = 1.3;
+    const hullWidth = 3.0;
+    group.add(this.box([hullLength, hullHeight, hullWidth], [0, hullHeight / 2, 0], hullMat));
+
+    // Deck
+    group.add(this.box([hullLength + 0.4, 0.08, hullWidth + 0.2], [0, hullHeight + 0.04, 0], this.material(COLORS.deck, 0.76)));
+
+    // Bridge at stern
+    group.add(this.box([1.8, 1.8, 2.2], [-5.5, hullHeight + 0.96, 0], this.material(0xe8ebe5, 0.58)));
+    group.add(this.box([1.4, 0.35, 2.4], [-5.5, hullHeight + 2.08, 0], this.material(0x2a3640, 0.5)));
+    // Funnel
+    group.add(this.box([0.45, 0.9, 0.5], [-6.0, hullHeight + 1.7, 0], this.material(0xcc3333, 0.6)));
+
+    // Containers on deck
     for (let i = 0; i < remaining; i += 1) {
       const colorCycle = [COLORS.import, COLORS.export, COLORS.transshipment][i % 3];
-      group.add(this.box([0.9, 0.42, 0.48], [-1.9 + (i % 5) * 1.0, 1.78 + Math.floor(i / 5) * 0.45, -0.62 + (i % 2) * 1.24], this.material(colorCycle, 0.7, 0.06)));
+      const col = i % 2;
+      const row = Math.floor(i / 2) % 6;
+      const tier = Math.floor(i / 12);
+      const cx = -3.0 + row * 1.15;
+      const cy = hullHeight + 0.36 + tier * 0.58;
+      const cz = -0.5 + col * 1.0;
+      group.add(this.box([1.0, 0.5, 0.8], [cx, cy, cz], this.material(colorCycle, 0.7, 0.06)));
     }
-    if (this.options.labels) group.add(this.labelSprite(label, [0, 3.15, 0]));
+
+    if (this.options.labels) group.add(this.labelSprite(label, [6, 2.0, -2.0]));
     return group;
   }
 
@@ -568,7 +584,7 @@ export class PortScene {
 
       if (this.options.labels && !blockLabels.has(stackInfo.block)) {
         blockLabels.add(stackInfo.block);
-        this.dynamicGroup.add(this.labelSprite(`Block ${stackInfo.block}`, [x, 0.62, z + 3.2]));
+        this.dynamicGroup.add(this.labelSprite(`Block ${stackInfo.block}`, [x, 1.8, z + 3.2]));
       }
     });
   }

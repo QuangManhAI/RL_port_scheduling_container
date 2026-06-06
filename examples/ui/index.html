@@ -49,22 +49,14 @@
             <label class="field">
               <span>Mode</span>
               <select id="modeSelect">
-                <option value="manual">Manual stack</option>
                 <option value="heuristic">Heuristic</option>
-                <option value="random">Random</option>
+                <option value="rl">RL Agent</option>
               </select>
             </label>
             <label class="field">
               <span>Speed</span>
               <input id="speedInput" type="range" min="120" max="1200" step="40" value="420" />
             </label>
-          </div>
-
-          <div class="segmented-control" aria-label="Camera controls">
-            <button class="camera-btn active" data-camera="overview">Overview</button>
-            <button class="camera-btn" data-camera="follow">Follow</button>
-            <button class="camera-btn" data-camera="crane">Crane</button>
-            <button class="camera-btn" data-camera="yard">Yard</button>
           </div>
           
           <div class="toggle-row">
