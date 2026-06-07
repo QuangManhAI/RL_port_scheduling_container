@@ -7,6 +7,10 @@ Run from the repository root:
 
 from __future__ import annotations
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import argparse
 import json
 import random
@@ -110,11 +114,47 @@ class SimulationSession:
             return random.randrange(self.env.action_space.n)
         if mode == "heuristic":
             return self._heuristic_action()
+        if mode == "rl":
+            return self._rl_action()
         if action is None:
             return 0
         if action < 0 or action >= self.env.action_space.n:
             return 0
         return action
+
+    def _rl_action(self) -> int:
+        if not hasattr(self, "_ppo_model") or self._ppo_model is None:
+            from stable_baselines3 import PPO
+            import os
+            model_paths = [
+                "logs/models/ppo_port_scheduling_ui.zip",
+                "logs/models/ppo_port_scheduling_tuned_fallback.zip",
+                "logs/models/ppo_port_scheduling.zip"
+            ]
+            loaded = False
+            for path in model_paths:
+                if os.path.exists(path):
+                    try:
+                        self._ppo_model = PPO.load(path)
+                        self.event_log.insert(0, f"Loaded RL model from {path}")
+                        loaded = True
+                        break
+                    except Exception as e:
+                        self.event_log.insert(0, f"Error loading model {path}: {e}")
+            if not loaded:
+                self.event_log.insert(0, "No trained RL model found. Using heuristic fallback.")
+                self._ppo_model = None
+
+        if self._ppo_model is not None:
+            try:
+                # Use stochastic predict to prevent deterministic collapse
+                action, _ = self._ppo_model.predict(self.obs, deterministic=False)
+                return int(action)
+            except Exception as e:
+                self.event_log.insert(0, f"RL prediction error: {e}. Using heuristic fallback.")
+                return self._heuristic_action()
+        else:
+            return self._heuristic_action()
 
     def _heuristic_action(self) -> int:
         if self.env.current_container is None:
@@ -191,6 +231,90 @@ class SimulationSession:
         }
 
 
+import threading
+from stable_baselines3.common.callbacks import BaseCallback
+
+TRAINING_STATUS = {
+    "running": False,
+    "current_step": 0,
+    "total_steps": 10000,
+    "rewards_history": [],  # list of [step, reward]
+}
+
+
+class UiTrainingCallback(BaseCallback):
+    def __init__(self, verbose: int = 0) -> None:
+        super().__init__(verbose)
+        self.episode_rewards: list[float] = []
+        self.last_logged_step = 0
+
+    def _on_step(self) -> bool:
+        TRAINING_STATUS["current_step"] = self.num_timesteps
+        for info in self.locals.get("infos", []):
+            if "episode" in info:
+                self.episode_rewards.append(float(info["episode"]["r"]))
+                
+        if self.num_timesteps - self.last_logged_step >= 200:
+            mean_rew = float(np.mean(self.episode_rewards[-10:])) if self.episode_rewards else 0.0
+            TRAINING_STATUS["rewards_history"].append([self.num_timesteps, mean_rew])
+            self.last_logged_step = self.num_timesteps
+        return True
+
+
+def run_ui_training() -> None:
+    print("run_ui_training thread started...", flush=True)
+    try:
+        import os
+        from dataclasses import replace
+        from stable_baselines3 import PPO
+        from stable_baselines3.common.monitor import Monitor
+        
+        cfg = default_config()
+        # Apply the optimized reward weights
+        cfg = replace(
+            cfg,
+            weight_valid_placement=0.0,
+            weight_invalid_placement=-50.0,
+            weight_ship_complete=0.0,
+            weight_rehandling_penalty=-10.0,
+            weight_delay_penalty=-5.0,
+            weight_idle_penalty=0.0,
+            weight_distance_penalty=-1.0
+        )
+        
+        train_env = Monitor(PortEnv(cfg))
+        model = PPO(
+            policy="MultiInputPolicy",
+            env=train_env,
+            learning_rate=3e-4,
+            seed=42,
+            verbose=0
+        )
+        
+        TRAINING_STATUS["current_step"] = 0
+        TRAINING_STATUS["rewards_history"] = []
+        
+        model.learn(total_timesteps=10000, callback=UiTrainingCallback())
+        
+        os.makedirs("logs/models", exist_ok=True)
+        model.save("logs/models/ppo_port_scheduling_ui")
+        
+        # Reset model in current session so it gets reloaded
+        if hasattr(SESSION, "_ppo_model"):
+            SESSION._ppo_model = None
+        print("run_ui_training thread completed successfully!", flush=True)
+            
+    except Exception as e:
+        import os
+        import traceback
+        os.makedirs("logs", exist_ok=True)
+        with open("logs/ui_training_error.log", "w") as f:
+            traceback.print_exc(file=f)
+        print(f"UI Training Exception: {e}", flush=True)
+    finally:
+        TRAINING_STATUS["running"] = False
+
+
 SESSION = SimulationSession()
 
 
@@ -199,6 +323,9 @@ class UiHandler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(UI_DIR), **kwargs)
 
     def do_GET(self) -> None:
+        if self.path == "/api/train/status":
+            self._send_json(TRAINING_STATUS)
+            return
         if self.path == "/api/state":
             self._send_json(SESSION.state())
             return
@@ -208,6 +335,12 @@ class UiHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:
         payload = self._read_json()
+        if self.path == "/api/train":
+            if not TRAINING_STATUS["running"]:
+                TRAINING_STATUS["running"] = True
+                threading.Thread(target=run_ui_training, daemon=True).start()
+            self._send_json(TRAINING_STATUS)
+            return
         if self.path == "/api/reset":
             seed = int(payload.get("seed", 1))
             self._send_json(SESSION.reset(seed=seed))

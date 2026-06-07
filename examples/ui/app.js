@@ -34,7 +34,15 @@ const els = {
   animationToggle: document.querySelector("#animationToggle"),
   animSpeed: document.querySelector("#animSpeed"),
   cameraButtons: [...document.querySelectorAll(".camera-btn")],
+  trainBtn: document.querySelector("#trainBtn"),
+  trainStatus: document.querySelector("#trainStatus"),
+  progressContainer: document.querySelector("#progressContainer"),
+  trainProgress: document.querySelector("#trainProgress"),
+  chartContainer: document.querySelector("#chartContainer"),
+  trainChart: document.querySelector("#trainChart"),
 };
+
+let trainingChart = null;
 
 const dashboard = new Dashboard(els);
 const planningGrid = new YardPlanningGrid(els.yardView, selectAction);
@@ -116,6 +124,98 @@ function stopRun() {
   }
 }
 
+async function startTraining() {
+  els.trainBtn.disabled = true;
+  els.trainBtn.textContent = "Training...";
+  els.trainStatus.textContent = "Initializing...";
+  els.progressContainer.style.display = "block";
+  els.chartContainer.style.display = "block";
+  els.trainProgress.style.width = "0%";
+  
+  if (!trainingChart) {
+    const ctx = els.trainChart.getContext("2d");
+    trainingChart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [{
+          label: "Mean Reward",
+          data: [],
+          borderColor: "#3b82f6",
+          backgroundColor: "rgba(59, 130, 246, 0.15)",
+          borderWidth: 2,
+          fill: true,
+          tension: 0.3,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+        },
+        scales: {
+          x: {
+            grid: { color: "rgba(255, 255, 255, 0.05)" },
+            ticks: { color: "#94a3b8", font: { family: "Outfit" } },
+            title: { display: true, text: "Steps", color: "#94a3b8", font: { family: "Outfit", size: 10 } }
+          },
+          y: {
+            grid: { color: "rgba(255, 255, 255, 0.05)" },
+            ticks: { color: "#94a3b8", font: { family: "Outfit" } },
+            title: { display: true, text: "Reward", color: "#94a3b8", font: { family: "Outfit", size: 10 } }
+          }
+        }
+      }
+    });
+  } else {
+    trainingChart.data.labels = [];
+    trainingChart.data.datasets[0].data = [];
+    trainingChart.update();
+  }
+
+  await requestJson("/api/train", {});
+  pollTrainingStatus();
+}
+
+async function pollTrainingStatus() {
+  const status = await requestJson("/api/train/status");
+  
+  if (status.running) {
+    const pct = Math.round((status.current_step / status.total_steps) * 100);
+    els.trainProgress.style.width = `${pct}%`;
+    els.trainStatus.textContent = `Training: ${status.current_step}/${status.total_steps} steps (${pct}%)`;
+    
+    const labels = status.rewards_history.map(item => item[0]);
+    const data = status.rewards_history.map(item => item[1]);
+    
+    trainingChart.data.labels = labels;
+    trainingChart.data.datasets[0].data = data;
+    trainingChart.update();
+    
+    setTimeout(pollTrainingStatus, 500);
+  } else {
+    els.trainProgress.style.width = "100%";
+    els.trainStatus.textContent = "Complete!";
+    els.trainBtn.disabled = false;
+    els.trainBtn.textContent = "Train Model";
+    
+    const labels = status.rewards_history.map(item => item[0]);
+    const data = status.rewards_history.map(item => item[1]);
+    trainingChart.data.labels = labels;
+    trainingChart.data.datasets[0].data = data;
+    trainingChart.update();
+    
+    // Automatically switch mode select to RL Agent
+    if (els.modeSelect) {
+      els.modeSelect.value = "rl";
+    }
+    
+    // Refresh environment to pick up new model
+    refresh();
+  }
+}
+
 function syncSceneOptions() {
   portScene.setOptions({
     labels: els.labelsToggle.checked,
@@ -132,6 +232,7 @@ els.runBtn.addEventListener("click", () => {
   if (state.running) stopRun();
   else startRun();
 });
+els.trainBtn.addEventListener("click", startTraining);
 els.speedInput.addEventListener("input", () => {
   if (!state.running) return;
   stopRun();

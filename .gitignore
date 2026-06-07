@@ -10,3 +10,5 @@ logs/tb/ppo_default_1/events.out.tfevents.1780822480.Nhus-Mac-mini.local.5697.0
 logs/models/ppo_port_scheduling_tuned_fallback.zip
 logs/models/ppo_port_scheduling_tuned.zip
 logs/models/ppo_port_scheduling.zip
+*.log
+*.zip

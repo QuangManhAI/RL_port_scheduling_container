@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
   <body>
     <!-- Background 3D Scene -->
@@ -72,6 +73,20 @@
           <span><i class="legend-box export"></i>Export</span>
           <span><i class="legend-box transshipment"></i>Trans</span>
         </div>
+
+        <section class="glass-inner training-panel">
+          <h2>RL Agent Training</h2>
+          <div class="control-row align-center">
+            <button id="trainBtn" class="button primary">Train Model</button>
+            <span id="trainStatus" class="eyebrow" style="margin-left: 12px; margin-bottom: 0;">Idle</span>
+          </div>
+          <div id="progressContainer" class="progress-bar-container" style="display: none; margin-top: 12px;">
+            <div id="trainProgress" class="progress-bar-fill"></div>
+          </div>
+          <div id="chartContainer" class="chart-wrapper" style="display: none; margin-top: 16px;">
+            <canvas id="trainChart"></canvas>
+          </div>
+        </section>
 
         <section id="yardView" class="yard-view" aria-label="Container yard"></section>
       </section>
