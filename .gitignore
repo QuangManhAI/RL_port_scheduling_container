@@ -1,1 +1,12 @@
 /.venv
+logs/tb_tuned_fallback/ppo_medium_1/events.out.tfevents.1780823069.Nhus-Mac-mini.local.6864.0
+.gitignore
+logs/tb/ppo_medium_1/events.out.tfevents.1780822499.Nhus-Mac-mini.local.5741.0
+logs/tb_tuned/ppo_medium_1/events.out.tfevents.1780822929.Nhus-Mac-mini.local.6584.0
+.gitignore
+logs/tb/ppo_default_2/events.out.tfevents.1780822492.Nhus-Mac-mini.local.5725.0
+.gitignore
+logs/tb/ppo_default_1/events.out.tfevents.1780822480.Nhus-Mac-mini.local.5697.0
+logs/models/ppo_port_scheduling_tuned_fallback.zip
+logs/models/ppo_port_scheduling_tuned.zip
+logs/models/ppo_port_scheduling.zip

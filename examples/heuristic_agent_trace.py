@@ -12,22 +12,16 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from port_sim import Container, PortEnv, default_config
+from port_sim import PortEnv, default_config
 
 
 def stack_height(yard: np.ndarray, block: int, bay: int, stack: int) -> int:
-    return int(np.count_nonzero(yard[block, bay, stack, :]))
+    """Count occupied tiers.  Feature index 0 (type) > 0 means occupied."""
+    return int(np.sum(yard[block, bay, stack, :, 0] > 0))
 
 
-def container_index(env: PortEnv) -> dict[int, Container]:
-    containers = {}
-    for ship in env.scheduler.ships:
-        for container in ship.containers:
-            containers[container.id] = container
-    return containers
-
-
-def score_action(env: PortEnv, yard: np.ndarray, action: int, index: dict[int, Container]) -> tuple[float, list[str]]:
+def score_action(env: PortEnv, yard: np.ndarray, action: int) -> tuple[float, list[str]]:
+    """Score a yard placement using normalised features from the observation."""
     container = env.current_container
     if container is None:
         return 0.0, ["no container waiting"]
@@ -41,12 +35,12 @@ def score_action(env: PortEnv, yard: np.ndarray, action: int, index: dict[int, C
     score = 100.0
     reasons = [f"valid stack height={height}", f"distance={distance}"]
 
-    # If this container is due later than containers below it, it may block them.
+    # Compare deadlines using normalised features from the observation.
     blocking_risk = 0
+    current_norm_deadline = container.deadline / env.max_deadline
     for tier in range(height):
-        below_id = int(yard[block, bay, stack, tier])
-        below = index.get(below_id)
-        if below is not None and below.deadline < container.deadline:
+        below_norm_deadline = float(yard[block, bay, stack, tier, 1])
+        if below_norm_deadline > 0 and below_norm_deadline < current_norm_deadline:
             blocking_risk += 1
 
     urgency = max(0, env.config.max_time - container.deadline)
@@ -67,10 +61,10 @@ def score_action(env: PortEnv, yard: np.ndarray, action: int, index: dict[int, C
     return score, reasons
 
 
-def choose_action(env: PortEnv, obs: dict[str, np.ndarray], index: dict[int, Container]) -> tuple[int, float, list[str]]:
+def choose_action(env: PortEnv, obs: dict[str, np.ndarray]) -> tuple[int, float, list[str]]:
     scored = []
     for action in range(env.action_space.n):
-        score, reasons = score_action(env, obs["yard"], action, index)
+        score, reasons = score_action(env, obs["yard"], action)
         scored.append((score, action, reasons))
     score, action, reasons = max(scored, key=lambda item: item[0])
     return action, score, reasons
@@ -93,7 +87,6 @@ def compact_yard(yard: np.ndarray) -> str:
 def main() -> None:
     env = PortEnv(default_config())
     obs, info = env.reset(seed=3)
-    index = container_index(env)
     total_reward = 0.0
 
     print("iterative heuristic agent trace")
@@ -105,7 +98,7 @@ def main() -> None:
             action = 0
             print(f"\nstep {step} time={env.time}: no container available, advancing time")
         else:
-            action, score, reasons = choose_action(env, obs, index)
+            action, score, reasons = choose_action(env, obs)
             block, bay, stack = env.decode_action(action)
             print(
                 f"\nstep {step} time={env.time}: container={current.id} "
@@ -121,7 +114,7 @@ def main() -> None:
         if info["reward_breakdown"]:
             print(f"  reward_breakdown={info['reward_breakdown']}")
         print("  yard:")
-        print(compact_yard(obs["yard"]))
+        print(compact_yard(env.yard.grid))
 
         if terminated or truncated:
             status = "terminated" if terminated else "truncated"

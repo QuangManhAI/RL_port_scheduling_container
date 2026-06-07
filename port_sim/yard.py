@@ -111,6 +111,10 @@ class Yard:
     def location_of(self, container_id: int) -> Optional[YardLocation]:
         return self._locations.get(container_id)
 
+    def get_container(self, container_id: int) -> Optional[Container]:
+        """Return the stored container by ID, or ``None`` if not present."""
+        return self._containers.get(container_id)
+
     def _relocate_blocking_container(self, container: Container, forbidden: tuple[int, int, int]) -> None:
         best: Optional[tuple[int, int, int]] = None
         best_height = self.tiers + 1

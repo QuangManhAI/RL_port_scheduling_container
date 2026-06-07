@@ -94,7 +94,7 @@ class SimulationSession:
                 "actionCount": self.env.config.action_count,
                 "maxTime": self.env.config.max_time,
             },
-            "yard": self.obs["yard"].tolist(),
+            "yard": self.env.yard.grid.tolist(),
             "currentContainer": self._container_payload(self.env.current_container),
             "pendingContainers": [self._container_payload(item) for item in self.env.pending_containers],
             "ships": [self._ship_payload(ship) for ship in self.env.scheduler.ships],
@@ -119,7 +119,7 @@ class SimulationSession:
     def _heuristic_action(self) -> int:
         if self.env.current_container is None:
             return 0
-        yard = self.obs["yard"]
+        yard = self.env.yard.grid
         index = self._container_index()
         scored = []
         for action in range(self.env.action_space.n):

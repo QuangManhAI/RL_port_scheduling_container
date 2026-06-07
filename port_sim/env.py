@@ -40,14 +40,21 @@ class PortEnv(gym.Env):
         self.completed_ship_ids: set[int] = set()
         self.last_reward_breakdown: dict[str, float] = {}
 
+        # Normalization constants derived from the ship schedule so that
+        # yard observation features are scaled to roughly [0, 1].
+        all_containers = [c for ship in self.config.schedule for c in ship.containers]
+        self.max_deadline = max((c.deadline for c in all_containers), default=1) or 1
+        self.max_priority = max((c.priority for c in all_containers), default=1) or 1
+        self.max_weight = max((c.weight for c in all_containers), default=1.0) or 1.0
+
         self.action_space = spaces.Discrete(self.config.action_count)
         self.observation_space = spaces.Dict(
             {
                 "yard": spaces.Box(
-                    low=0,
-                    high=np.iinfo(np.int64).max,
-                    shape=(self.config.blocks, self.config.bays, self.config.stacks, self.config.tiers),
-                    dtype=np.int64,
+                    low=0.0,
+                    high=1.0,
+                    shape=(self.config.blocks, self.config.bays, self.config.stacks, self.config.tiers, 4),
+                    dtype=np.float32,
                 ),
                 "current_container": spaces.Box(low=0, high=1_000_000, shape=(5,), dtype=np.float32),
                 "time": spaces.Box(low=0, high=self.config.max_time, shape=(1,), dtype=np.int64),
@@ -93,9 +100,9 @@ class PortEnv(gym.Env):
             block, bay, stack = self.decode_action(action)
             placement = self.yard.place(self.current_container, block, bay, stack)
             if placement.valid:
-                reward += 10.0
-                breakdown["valid_placement"] += 10.0
-                distance_penalty = -0.1 * self._yard_distance(block, bay, stack)
+                reward += self.config.weight_valid_placement
+                breakdown["valid_placement"] += self.config.weight_valid_placement
+                distance_penalty = self.config.weight_distance_penalty * self._yard_distance(block, bay, stack)
                 reward += distance_penalty
                 breakdown["distance"] += distance_penalty
                 self.cranes.assign_first_available(
@@ -108,15 +115,48 @@ class PortEnv(gym.Env):
                 )
                 complete = self.scheduler.mark_loaded_to_yard(self.current_ship.id)
                 if complete and self.current_ship.id not in self.completed_ship_ids:
-                    reward += 5.0
-                    breakdown["ship_complete"] += 5.0
+                    reward += self.config.weight_ship_complete
+                    breakdown["ship_complete"] += self.config.weight_ship_complete
                     self.completed_ship_ids.add(self.current_ship.id)
                 self.pending_containers.append(self.current_container)
                 self.current_container = None
                 self.current_ship = None
             else:
-                reward -= 20.0
-                breakdown["invalid_placement"] -= 20.0
+                reward += self.config.weight_invalid_placement
+                breakdown["invalid_placement"] += self.config.weight_invalid_placement
+                
+                # Fallback: place in the first available valid stack to keep env state consistent
+                fallback_placed = False
+                for b in range(self.config.blocks):
+                    for ba in range(self.config.bays):
+                        for s in range(self.config.stacks):
+                            if self.yard.can_place(b, ba, s):
+                                self.yard.place(self.current_container, b, ba, s)
+                                fallback_placed = True
+                                break
+                        if fallback_placed:
+                            break
+                    if fallback_placed:
+                        break
+                
+                if fallback_placed:
+                    self.pending_containers.append(self.current_container)
+                    self.cranes.assign_first_available(
+                        CraneTask(
+                            kind=CraneKind.QUAY,
+                            container_id=self.current_container.id,
+                            duration=self.config.quay_task_duration,
+                            description="ship_to_yard",
+                        )
+                    )
+                    complete = self.scheduler.mark_loaded_to_yard(self.current_ship.id)
+                    if complete and self.current_ship.id not in self.completed_ship_ids:
+                        reward += self.config.weight_ship_complete
+                        breakdown["ship_complete"] += self.config.weight_ship_complete
+                        self.completed_ship_ids.add(self.current_ship.id)
+                
+                self.current_container = None
+                self.current_ship = None
 
             idle_penalty = self._idle_penalty(work_pending=bool(self.current_container or self.pending_containers))
             reward += idle_penalty
@@ -189,8 +229,8 @@ class PortEnv(gym.Env):
                     description="yard_retrieve",
                 )
             )
-            rehandle_penalty = -1.0 * result.rehandles
-            delay_penalty = -2.0 * max(0, self.time - container.deadline)
+            rehandle_penalty = self.config.weight_rehandling_penalty * result.rehandles
+            delay_penalty = self.config.weight_delay_penalty * max(0, self.time - container.deadline)
             reward += rehandle_penalty + delay_penalty
             rehandling_component += rehandle_penalty
             delay_component += delay_penalty
@@ -199,20 +239,50 @@ class PortEnv(gym.Env):
     def _idle_penalty(self, work_pending: bool) -> float:
         if not work_pending:
             return 0.0
-        return -1.0 * self.cranes.idle_count(CraneKind.QUAY)
+        return self.config.weight_idle_penalty * self.cranes.idle_count(CraneKind.QUAY)
 
     def _yard_distance(self, block: int, bay: int, stack: int) -> float:
         return float(block + bay + stack)
 
     def _observation(self) -> dict[str, np.ndarray]:
         return {
-            "yard": self.yard.grid,
+            "yard": self._yard_feature_grid(),
             "current_container": self._encode_container(self.current_container),
             "time": np.array([self.time], dtype=np.int64),
             "ship_queue": np.array(self.scheduler.snapshot(self.time), dtype=np.int64),
             "crane_status": np.array(self.cranes.availability_vector(), dtype=np.int8),
             "pending_containers": self._encode_pending(),
         }
+
+    def _yard_feature_grid(self) -> np.ndarray:
+        """Encode the yard as a feature grid.
+
+        Each cell holds ``[type, norm_deadline, norm_priority, norm_weight]``
+        with values in ``[0, 1]``.  Empty cells are all zeros.  Container type
+        is shifted by one before normalising so that
+        IMPORT -> 1/3, EXPORT -> 2/3, TRANSSHIPMENT -> 1.0,
+        clearly separating occupied cells from empty ones (0).
+        """
+        shape = (self.config.blocks, self.config.bays, self.config.stacks, self.config.tiers, 4)
+        features = np.zeros(shape, dtype=np.float32)
+        id_grid = self.yard.grid
+        for b in range(self.config.blocks):
+            for ba in range(self.config.bays):
+                for s in range(self.config.stacks):
+                    for t in range(self.config.tiers):
+                        cid = int(id_grid[b, ba, s, t])
+                        if cid == 0:
+                            continue
+                        container = self.yard.get_container(cid)
+                        if container is None:
+                            continue
+                        features[b, ba, s, t] = [
+                            (float(container.type) + 1.0) / 3.0,
+                            float(container.deadline) / self.max_deadline,
+                            float(container.priority) / self.max_priority,
+                            float(container.weight) / self.max_weight,
+                        ]
+        return features
 
     def _encode_container(self, container: Optional[Container]) -> np.ndarray:
         if container is None:

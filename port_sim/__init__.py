@@ -1,6 +1,6 @@
 """Container port simulation package."""
 
-from port_sim.config import PortConfig, default_config
+from port_sim.config import PortConfig, default_config, medium_config
 from port_sim.models import Container, ContainerType, Ship
 
 __all__ = [
@@ -10,6 +10,7 @@ __all__ = [
     "PortEnv",
     "Ship",
     "default_config",
+    "medium_config",
 ]
 
 
