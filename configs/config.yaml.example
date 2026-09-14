@@ -1,0 +1,31 @@
+# Configuration skeleton — copy this file to configs/config.yaml and fill in.
+# Centralized configuration for the data pipeline and training modules.
+
+dataset:
+  name: "[dataset name]"
+  root: "data/raw"          # single canonical copy
+  download: true            # only when the root is empty
+  num_classes: [n]
+
+dataloader:
+  batch_size: 64
+  shuffle_train: true
+  shuffle_eval: false
+  # 0 = main-process loading: safe on Python 3.14 (see agents/bugs for the
+  # BrokenPipeError case). Set >0 on a stable runtime to enable multiprocess.
+  num_workers: 0
+  pin_memory: true
+  persistent_workers: false
+  drop_last: false
+
+split:
+  seed: 42
+  train_ratio: 0.9          # train/val split ratio
+  split_file: "data/processed/split_seed42.json"
+
+training:
+  seed: 42
+  device: "cuda"            # or "cpu"
+  epochs: 30
+  deterministic: false
+  benchmark: true
