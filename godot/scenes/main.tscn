@@ -1,29 +1,28 @@
-[gd_scene load_steps=14 format=3 uid="uid://dmx3main001"]
+[gd_scene load_steps=13 format=3 uid="uid://dmx3whmain001"]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
-[ext_resource type="PackedScene" path="res://scenes/environment/water.tscn" id="2_water"]
-[ext_resource type="PackedScene" path="res://scenes/environment/berth.tscn" id="3_berth"]
-[ext_resource type="PackedScene" path="res://scenes/entities/ship.tscn" id="4_ship"]
-[ext_resource type="PackedScene" path="res://scenes/entities/quay_crane.tscn" id="5_qc"]
-[ext_resource type="PackedScene" path="res://scenes/environment/yard_grid.tscn" id="6_yard"]
-[ext_resource type="PackedScene" path="res://scenes/entities/agv.tscn" id="7_agv"]
-[ext_resource type="PackedScene" path="res://scenes/ui/camera_controller.tscn" id="8_cam"]
-[ext_resource type="Script" path="res://scripts/bridge/sim_client.gd" id="9_bridge"]
-[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="10_hud"]
+[ext_resource type="PackedScene" path="res://scenes/environment/warehouse_floor.tscn" id="2_floor"]
+[ext_resource type="PackedScene" path="res://scenes/environment/warehouse_grid.tscn" id="3_grid"]
+[ext_resource type="PackedScene" path="res://scenes/entities/amr_robot.tscn" id="4_amr"]
+[ext_resource type="PackedScene" path="res://scenes/environment/pick_station.tscn" id="5_pick"]
+[ext_resource type="PackedScene" path="res://scenes/environment/charging_station.tscn" id="6_charge"]
+[ext_resource type="PackedScene" path="res://scenes/ui/camera_controller.tscn" id="7_cam"]
+[ext_resource type="Script" path="res://scripts/bridge/sim_client.gd" id="8_bridge"]
+[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="9_hud"]
 
-[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
-sky_top_color = Color(0.38, 0.55, 0.78, 1)
-sky_horizon_color = Color(0.72, 0.78, 0.84, 1)
-ground_bottom_color = Color(0.2, 0.2, 0.2, 1)
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_wh"]
+sky_top_color = Color(0.2, 0.22, 0.26, 1)
+sky_horizon_color = Color(0.3, 0.32, 0.35, 1)
+ground_bottom_color = Color(0.12, 0.12, 0.14, 1)
 
-[sub_resource type="Sky" id="Sky_env"]
-sky_material = SubResource("ProceduralSkyMaterial_sky")
+[sub_resource type="Sky" id="Sky_wh"]
+sky_material = SubResource("ProceduralSkyMaterial_wh")
 
-[sub_resource type="Environment" id="Environment_main"]
+[sub_resource type="Environment" id="Environment_wh"]
 background_mode = 2
-sky = SubResource("Sky_env")
+sky = SubResource("Sky_wh")
 ambient_light_source = 2
-ambient_light_color = Color(0.8, 0.85, 0.9, 1)
+ambient_light_color = Color(0.7, 0.72, 0.76, 1)
 tonemap_mode = 2
 ssao_enabled = true
 
@@ -31,31 +30,61 @@ ssao_enabled = true
 script = ExtResource("1_main")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
-environment = SubResource("Environment_main")
+environment = SubResource("Environment_wh")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
-transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 30, 50, 30)
+[node name="HighBayLight1" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 20, 35, 20)
+light_color = Color(0.98, 0.96, 0.92, 1)
+light_energy = 1.2
 shadow_enabled = true
 
-[node name="Water" parent="." instance=ExtResource("2_water")]
+[node name="HighBayLight2" type="DirectionalLight3D" parent="."]
+transform = Transform3D(-0.707107, 0, -0.707107, -0.5, 0.707107, 0.5, 0.5, 0.707107, -0.5, -20, 35, -20)
+light_color = Color(0.85, 0.9, 1.0, 1)
+light_energy = 0.5
 
-[node name="Berth" parent="." instance=ExtResource("3_berth")]
+[node name="WarehouseFloor" parent="." instance=ExtResource("2_floor")]
 
-[node name="Ship" parent="." instance=ExtResource("4_ship")]
+[node name="WarehouseGrid" parent="." instance=ExtResource("3_grid")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
 
-[node name="QuayCrane" parent="." instance=ExtResource("5_qc")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, -22)
+[node name="Fleet" type="Node3D" parent="."]
 
-[node name="YardGrid" parent="." instance=ExtResource("6_yard")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 10)
+[node name="AMR_01" parent="Fleet" instance=ExtResource("4_amr")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -25, 0, 0)
+robot_id = "AMR-01"
 
-[node name="AGV" parent="." instance=ExtResource("7_agv")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, -4)
+[node name="AMR_02" parent="Fleet" instance=ExtResource("4_amr")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -25)
+robot_id = "AMR-02"
 
-[node name="CameraController" parent="." instance=ExtResource("8_cam")]
+[node name="AMR_03" parent="Fleet" instance=ExtResource("4_amr")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18, 0, -10)
+robot_id = "AMR-03"
+
+[node name="AMR_04" parent="Fleet" instance=ExtResource("4_amr")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, -28)
+robot_id = "AMR-04"
+
+[node name="PickStations" type="Node3D" parent="."]
+
+[node name="PickStation_1" parent="PickStations" instance=ExtResource("5_pick")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10, 0, 26)
+
+[node name="PickStation_2" parent="PickStations" instance=ExtResource("5_pick")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 26)
+
+[node name="ChargingDocks" type="Node3D" parent="."]
+
+[node name="ChargingStation_1" parent="ChargingDocks" instance=ExtResource("6_charge")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0, -28)
+
+[node name="ChargingStation_2" parent="ChargingDocks" instance=ExtResource("6_charge")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15, 0, -28)
+
+[node name="CameraController" parent="." instance=ExtResource("7_cam")]
 
 [node name="SimClient" type="Node" parent="."]
-script = ExtResource("9_bridge")
+script = ExtResource("8_bridge")
 
-[node name="HUD" parent="." instance=ExtResource("10_hud")]
+[node name="HUD" parent="." instance=ExtResource("9_hud")]

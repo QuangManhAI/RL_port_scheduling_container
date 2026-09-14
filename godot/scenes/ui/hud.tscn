@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3 uid="uid://dmx3hud001"]
+[gd_scene load_steps=2 format=3 uid="uid://dmx3whhud001"]
 
 [ext_resource type="Script" path="res://scripts/ui/hud.gd" id="1_script"]
 
@@ -16,7 +16,7 @@ script = ExtResource("1_script")
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
-offset_bottom = 70.0
+offset_bottom = 75.0
 grow_horizontal = 2
 
 [node name="Title" type="Label" parent="TopBar"]
@@ -25,12 +25,12 @@ anchors_preset = 4
 anchor_top = 0.5
 anchor_bottom = 0.5
 offset_left = 24.0
-offset_top = -18.0
-offset_right = 380.0
-offset_bottom = 18.0
+offset_top = -20.0
+offset_right = 440.0
+offset_bottom = 20.0
 grow_vertical = 2
 theme_override_font_sizes/font_size = 20
-text = "RAMemory Smart Port Digital Twin"
+text = "RAMemory Smart Warehouse Digital Twin"
 vertical_alignment = 1
 
 [node name="ConnectionBadge" type="Label" parent="TopBar"]
@@ -40,14 +40,14 @@ anchor_left = 1.0
 anchor_top = 0.5
 anchor_right = 1.0
 anchor_bottom = 0.5
-offset_left = -260.0
+offset_left = -280.0
 offset_top = -14.0
 offset_right = -24.0
 offset_bottom = 14.0
 grow_horizontal = 0
 grow_vertical = 2
 theme_override_font_sizes/font_size = 14
-text = "○ OFFLINE (Local Mode)"
+text = "○ STANDALONE DIGITAL TWIN"
 horizontal_alignment = 2
 vertical_alignment = 1
 
@@ -58,64 +58,83 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -250.0
+offset_left = -320.0
 offset_top = -24.0
-offset_right = 250.0
+offset_right = 320.0
 offset_bottom = 24.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 40
+theme_override_constants/separation = 36
 alignment = 1
 
-[node name="CardStep" type="VBoxContainer" parent="TopBar/KPIContainer"]
+[node name="CardPickRate" type="VBoxContainer" parent="TopBar/KPIContainer"]
 layout_mode = 2
 alignment = 1
 
-[node name="TitleStep" type="Label" parent="TopBar/KPIContainer/CardStep"]
+[node name="Title" type="Label" parent="TopBar/KPIContainer/CardPickRate"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
-theme_override_font_sizes/font_size = 12
-text = "STEP"
+theme_override_font_sizes/font_size = 11
+text = "PICK RATE (TARGET: +15-25%)"
 horizontal_alignment = 1
 
-[node name="ValStep" type="Label" parent="TopBar/KPIContainer/CardStep"]
+[node name="ValPickRate" type="Label" parent="TopBar/KPIContainer/CardPickRate"]
 layout_mode = 2
+theme_override_colors/font_color = Color(0.2, 0.9, 0.4, 1)
 theme_override_font_sizes/font_size = 18
-text = "0"
+text = "+22.5%"
 horizontal_alignment = 1
 
-[node name="CardTime" type="VBoxContainer" parent="TopBar/KPIContainer"]
+[node name="CardFleet" type="VBoxContainer" parent="TopBar/KPIContainer"]
 layout_mode = 2
 alignment = 1
 
-[node name="TitleTime" type="Label" parent="TopBar/KPIContainer/CardTime"]
+[node name="Title" type="Label" parent="TopBar/KPIContainer/CardFleet"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
-theme_override_font_sizes/font_size = 12
-text = "SIM TIME"
+theme_override_font_sizes/font_size = 11
+text = "ACTIVE AMR FLEET"
 horizontal_alignment = 1
 
-[node name="ValTime" type="Label" parent="TopBar/KPIContainer/CardTime"]
+[node name="ValFleet" type="Label" parent="TopBar/KPIContainer/CardFleet"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
-text = "0.0s"
+text = "4 AMRs"
 horizontal_alignment = 1
 
-[node name="CardReward" type="VBoxContainer" parent="TopBar/KPIContainer"]
+[node name="CardDeadlocks" type="VBoxContainer" parent="TopBar/KPIContainer"]
 layout_mode = 2
 alignment = 1
 
-[node name="TitleReward" type="Label" parent="TopBar/KPIContainer/CardReward"]
+[node name="Title" type="Label" parent="TopBar/KPIContainer/CardDeadlocks"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
-theme_override_font_sizes/font_size = 12
-text = "ACCUM. REWARD"
+theme_override_font_sizes/font_size = 11
+text = "DEADLOCK COUNT"
 horizontal_alignment = 1
 
-[node name="ValReward" type="Label" parent="TopBar/KPIContainer/CardReward"]
+[node name="ValDeadlocks" type="Label" parent="TopBar/KPIContainer/CardDeadlocks"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.3, 0.8, 1.0, 1)
+theme_override_font_sizes/font_size = 18
+text = "0 (100% Anti-Deadlock)"
+horizontal_alignment = 1
+
+[node name="CardDeadheading" type="VBoxContainer" parent="TopBar/KPIContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="Title" type="Label" parent="TopBar/KPIContainer/CardDeadheading"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/font_size = 11
+text = "DEADHEADING RATIO"
+horizontal_alignment = 1
+
+[node name="ValDeadheading" type="Label" parent="TopBar/KPIContainer/CardDeadheading"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
-text = "+0.0"
+text = "13.8%"
 horizontal_alignment = 1
 
 [node name="BottomBar" type="Panel" parent="."]
@@ -124,7 +143,7 @@ anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = -60.0
+offset_top = -65.0
 grow_horizontal = 2
 grow_vertical = 0
 
@@ -135,29 +154,34 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -180.0
+offset_left = -280.0
 offset_top = -20.0
-offset_right = 180.0
+offset_right = 280.0
 offset_bottom = 20.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 20
+theme_override_constants/separation = 18
 alignment = 1
 
-[node name="BtnStep" type="Button" parent="BottomBar/Controls"]
-custom_minimum_size = Vector2(90, 36)
+[node name="BtnDispatch" type="Button" parent="BottomBar/Controls"]
+custom_minimum_size = Vector2(130, 36)
 layout_mode = 2
-text = "Step"
+text = "Dispatch Order"
+
+[node name="BtnConflict" type="Button" parent="BottomBar/Controls"]
+custom_minimum_size = Vector2(160, 36)
+layout_mode = 2
+text = "Simulate 4-Way Conflict"
 
 [node name="BtnAuto" type="Button" parent="BottomBar/Controls"]
-custom_minimum_size = Vector2(100, 36)
+custom_minimum_size = Vector2(120, 36)
 layout_mode = 2
-text = "Auto Run"
+text = "Auto Fleet Run"
 
 [node name="BtnReset" type="Button" parent="BottomBar/Controls"]
-custom_minimum_size = Vector2(90, 36)
+custom_minimum_size = Vector2(100, 36)
 layout_mode = 2
-text = "Reset"
+text = "Reset Floor"
 
 [node name="LogPanel" type="Panel" parent="."]
 layout_mode = 1
@@ -165,8 +189,8 @@ anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 20.0
-offset_top = -220.0
-offset_right = 360.0
+offset_top = -240.0
+offset_right = 420.0
 offset_bottom = -80.0
 grow_vertical = 0
 
@@ -175,9 +199,9 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 10.0
+offset_left = 12.0
 offset_top = 10.0
-offset_right = -10.0
+offset_right = -12.0
 offset_bottom = -10.0
 grow_horizontal = 2
 grow_vertical = 2

@@ -1,0 +1,54 @@
+[gd_scene load_steps=8 format=3 uid="uid://dmx3pick001"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_desk"]
+albedo_color = Color(0.2, 0.22, 0.25, 1)
+roughness = 0.4
+metallic = 0.5
+
+[sub_resource type="BoxMesh" id="BoxMesh_desk"]
+material = SubResource("StandardMaterial3D_desk")
+size = Vector3(4.5, 1.1, 2.0)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_conveyor"]
+albedo_color = Color(0.4, 0.42, 0.45, 1)
+roughness = 0.3
+metallic = 0.7
+
+[sub_resource type="BoxMesh" id="BoxMesh_conveyor"]
+material = SubResource("StandardMaterial3D_conveyor")
+size = Vector3(4.5, 0.2, 0.8)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_screen"]
+albedo_color = Color(0.05, 0.05, 0.05, 1)
+emission_enabled = true
+emission = Color(0.1, 0.7, 0.9, 1)
+emission_energy_multiplier = 0.8
+
+[sub_resource type="BoxMesh" id="BoxMesh_screen"]
+material = SubResource("StandardMaterial3D_screen")
+size = Vector3(1.2, 0.7, 0.1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_stand"]
+material = SubResource("StandardMaterial3D_desk")
+size = Vector3(0.1, 1.2, 0.1)
+
+[node name="PickStation" type="Node3D"]
+
+[node name="WorkstationDesk" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.55, 0)
+mesh = SubResource("BoxMesh_desk")
+
+[node name="ConveyorRoller" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.15, -0.4)
+mesh = SubResource("BoxMesh_conveyor")
+
+[node name="MonitorPole" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0.8)
+mesh = SubResource("BoxMesh_stand")
+
+[node name="OperatorScreen" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.1, 0.8)
+mesh = SubResource("BoxMesh_screen")
+
+[node name="AMRPresentationSpot" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2.5)

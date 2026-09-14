@@ -1,0 +1,55 @@
+[gd_scene load_steps=9 format=3 uid="uid://dmx3shelf001"]
+
+[ext_resource type="Script" path="res://scripts/environment/shelf_pod.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_frame"]
+albedo_color = Color(0.2, 0.25, 0.3, 1)
+roughness = 0.5
+metallic = 0.6
+
+[sub_resource type="BoxMesh" id="BoxMesh_frame"]
+material = SubResource("StandardMaterial3D_frame")
+size = Vector3(1.6, 2.2, 1.6)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tote_blue"]
+albedo_color = Color(0.12, 0.45, 0.85, 1)
+roughness = 0.3
+
+[sub_resource type="BoxMesh" id="BoxMesh_tote_1"]
+material = SubResource("StandardMaterial3D_tote_blue")
+size = Vector3(0.65, 0.4, 0.65)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tote_yellow"]
+albedo_color = Color(0.95, 0.75, 0.1, 1)
+roughness = 0.3
+
+[sub_resource type="BoxMesh" id="BoxMesh_tote_2"]
+material = SubResource("StandardMaterial3D_tote_yellow")
+size = Vector3(0.65, 0.4, 0.65)
+
+[node name="ShelfPod" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="PodFrame" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.45, 0)
+mesh = SubResource("BoxMesh_frame")
+
+[node name="ToteTier1_L" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.4, 0.8, -0.4)
+mesh = SubResource("BoxMesh_tote_1")
+
+[node name="ToteTier1_R" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.4, 0.8, 0.4)
+mesh = SubResource("BoxMesh_tote_2")
+
+[node name="ToteTier2_L" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.4, 1.35, 0.4)
+mesh = SubResource("BoxMesh_tote_2")
+
+[node name="ToteTier2_R" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.4, 1.35, -0.4)
+mesh = SubResource("BoxMesh_tote_1")
+
+[node name="ToteTier3_Center" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.9, 0)
+mesh = SubResource("BoxMesh_tote_1")

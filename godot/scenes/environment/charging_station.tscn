@@ -1,0 +1,50 @@
+[gd_scene load_steps=7 format=3 uid="uid://dmx3charge001"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pad"]
+albedo_color = Color(0.15, 0.16, 0.18, 1)
+roughness = 0.4
+metallic = 0.5
+
+[sub_resource type="BoxMesh" id="BoxMesh_pad"]
+material = SubResource("StandardMaterial3D_pad")
+size = Vector3(2.0, 0.05, 2.0)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_contact"]
+albedo_color = Color(0.8, 0.6, 0.1, 1)
+roughness = 0.2
+metallic = 0.9
+
+[sub_resource type="BoxMesh" id="BoxMesh_contacts"]
+material = SubResource("StandardMaterial3D_contact")
+size = Vector3(0.8, 0.06, 0.2)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_led"]
+albedo_color = Color(0.0, 0.8, 0.2, 1)
+emission_enabled = true
+emission = Color(0.0, 1.0, 0.3, 1)
+emission_energy_multiplier = 2.0
+
+[sub_resource type="BoxMesh" id="BoxMesh_pillar"]
+material = SubResource("StandardMaterial3D_pad")
+size = Vector3(0.3, 1.5, 0.3)
+
+[node name="ChargingStation" type="Node3D"]
+
+[node name="GroundPad" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.025, 0)
+mesh = SubResource("BoxMesh_pad")
+
+[node name="ContactL" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.035, -0.4)
+mesh = SubResource("BoxMesh_contacts")
+
+[node name="ContactR" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.035, 0.4)
+mesh = SubResource("BoxMesh_contacts")
+
+[node name="Pillar" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.9, 0.75, 0)
+mesh = SubResource("BoxMesh_pillar")
+
+[node name="ChargeSpot" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
