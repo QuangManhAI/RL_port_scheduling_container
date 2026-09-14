@@ -1,23 +1,23 @@
 class_name CameraRig
 extends Node3D
 
-## RTS Simulation Camera Rig supporting pan, zoom, orbit, and preset angles.
+## Warehouse Simulation Camera Rig supporting RTS pan, zoom, orbit, and tactical presets.
 
 @export var pan_speed: float = 35.0
-@export var zoom_speed: float = 4.0
-@export var min_zoom: float = 10.0
-@export var max_zoom: float = 160.0
+@export var zoom_speed: float = 3.5
+@export var min_zoom: float = 8.0
+@export var max_zoom: float = 120.0
 @export var orbit_sensitivity: float = 0.004
 
 @onready var elevation_pivot: Node3D = $ElevationPivot
 @onready var camera_3d: Camera3D = $ElevationPivot/Camera3D
 
 var _is_orbiting: bool = false
-var _current_zoom: float = 65.0
+var _current_zoom: float = 45.0
 
 func _ready() -> void:
 	_current_zoom = camera_3d.position.z
-	set_view_isometric()
+	set_view_overview()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
@@ -41,11 +41,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventKey and event.pressed:
 		var key: InputEventKey = event as InputEventKey
 		if key.keycode == KEY_1:
-			set_view_isometric()
+			set_view_overview()
 		elif key.keycode == KEY_2:
 			set_view_topdown()
 		elif key.keycode == KEY_3:
-			set_view_quay()
+			set_view_pick_station()
+		elif key.keycode == KEY_4:
+			set_view_charging_dock()
 
 func _process(delta: float) -> void:
 	var move_dir: Vector3 = Vector3.ZERO
@@ -64,21 +66,30 @@ func _process(delta: float) -> void:
 
 	camera_3d.position.z = lerp(camera_3d.position.z, _current_zoom, delta * 10.0)
 
-func set_view_isometric() -> void:
+func set_view_overview() -> void:
 	var tween: Tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tween.tween_property(self, "rotation:y", deg_to_rad(-35.0), 0.6)
-	tween.tween_property(elevation_pivot, "rotation:x", deg_to_rad(-45.0), 0.6)
-	_current_zoom = 70.0
+	tween.tween_property(self, "global_position", Vector3(0.0, 0.0, 5.0), 0.6)
+	tween.tween_property(self, "rotation:y", deg_to_rad(-25.0), 0.6)
+	tween.tween_property(elevation_pivot, "rotation:x", deg_to_rad(-42.0), 0.6)
+	_current_zoom = 55.0
 
 func set_view_topdown() -> void:
 	var tween: Tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(self, "global_position", Vector3(0.0, 0.0, 0.0), 0.6)
 	tween.tween_property(self, "rotation:y", deg_to_rad(0.0), 0.6)
 	tween.tween_property(elevation_pivot, "rotation:x", deg_to_rad(-88.0), 0.6)
-	_current_zoom = 85.0
+	_current_zoom = 65.0
 
-func set_view_quay() -> void:
+func set_view_pick_station() -> void:
 	var tween: Tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tween.tween_property(self, "global_position", Vector3(10.0, 0.0, -10.0), 0.6)
-	tween.tween_property(self, "rotation:y", deg_to_rad(-70.0), 0.6)
-	tween.tween_property(elevation_pivot, "rotation:x", deg_to_rad(-25.0), 0.6)
-	_current_zoom = 35.0
+	tween.tween_property(self, "global_position", Vector3(0.0, 0.0, 26.0), 0.6)
+	tween.tween_property(self, "rotation:y", deg_to_rad(0.0), 0.6)
+	tween.tween_property(elevation_pivot, "rotation:x", deg_to_rad(-28.0), 0.6)
+	_current_zoom = 22.0
+
+func set_view_charging_dock() -> void:
+	var tween: Tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(self, "global_position", Vector3(-24.0, 0.0, -20.0), 0.6)
+	tween.tween_property(self, "rotation:y", deg_to_rad(45.0), 0.6)
+	tween.tween_property(elevation_pivot, "rotation:x", deg_to_rad(-30.0), 0.6)
+	_current_zoom = 24.0

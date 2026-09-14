@@ -1,122 +1,70 @@
-# 03_GODOT_3D_DIGITAL_TWIN.md — Godot 4 3D Digital Twin & Simulation Phase Specification
+# 03_GODOT_3D_DIGITAL_TWIN.md — Smart Warehouse AMR Fleet Digital Twin Phase Specification
 
-- **Motivation/Background**: Real-time 3D observability and autonomous simulation of container port scheduling and AGV fleet routing are required to validate reinforcement learning models and deliver the digital twin promised in the strategic charter.
-- **Purpose**: Provide the technical phase specification for the Godot 4 3D environment, procedural yard generation, kinematic crane/vehicle controllers, and the Python WebSocket telemetry bridge.
-- **Overview Pipeline**: Implements the approved plan in [`plan_godot_3d_env.md`](../../plan_godot_3d_env.md) and bridges [`src/port_sim/`](../src/port_sim) with [`godot/`](../../godot).
-- **Detailed Plan**: §1 Scope & Acceptance Criteria; §2 Input & Output Protocol Contracts; §3 Scene Hierarchy & Component Architecture; §4 Kinematics & Procedural Logic; §5 Verification & Run Instructions.
-- **References**: [`docs/PURPOSE.md`](../PURPOSE.md), [`plan_godot_3d_env.md`](../../plan_godot_3d_env.md), [`agents/rules/MD_CONVENTION.md`](../../agents/rules/MD_CONVENTION.md).
-- **Created**: 2026-09-14T22:38:00+07:00
-- **Last Updated**: 2026-09-14T22:38:00+07:00
+- **Motivation/Background**: Autonomous mobile robot (AMR) fleets face severe scaling bottlenecks (intersection deadlocks, vendor lock-in) beyond 20–30 units. A 3D digital twin is required to validate MARL anti-deadlock routing, Goods-to-Person fulfillment, and VDA 5050 compliance.
+- **Purpose**: Technical phase specification for the Godot 4 3D Smart Warehouse environment, procedural storage racking, lifter AMRs, and the VDA 5050 WebSocket telemetry bridge.
+- **Overview Pipeline**: Implements the approved plan in [`plan_warehouse_godot_3d_env.md`](../../plan_warehouse_godot_3d_env.md) and provides the digital twin anchor for [`docs/PURPOSE.md`](../PURPOSE.md).
+- **Detailed Plan**: §1 Scope & Acceptance Criteria; §2 VDA 5050 I/O Protocol; §3 Scene Hierarchy; §4 Kinematics & Yielding Logic; §5 Verification.
+- **References**: [`docs/PURPOSE.md`](../PURPOSE.md), [`DREAM.txt`](../../DREAM.txt), [`plan_warehouse_godot_3d_env.md`](../../plan_warehouse_godot_3d_env.md).
+- **Created**: 2026-09-14T23:10:00+07:00
+- **Last Updated**: 2026-09-14T23:14:00+07:00
 
 ---
 
 ## Metadata
 
 - **Phase ID**: `PHASE-03`
-- **Phase Name**: `Godot 4 3D Digital Twin & Telemetry Bridge`
+- **Phase Name**: `Smart Warehouse AMR Fleet 3D Digital Twin & VDA 5050 Bridge`
 - **Status**: Completed
-- **Target Directories**: [`godot/`](../../godot), [`src/utils/godot_bridge.py`](../src/utils/godot_bridge.py)
+- **Target Directories**: [`godot/`](../../godot), [`src/utils/warehouse_bridge.py`](../src/utils/warehouse_bridge.py)
 
 ---
 
 ## 1. Scope & Objective
 
 ### Background
-Container yard logistics require fine-grained spatial coordination of quay cranes, yard cranes (RTGs), and transport vehicles (AGVs/AMRs). While [`src/port_sim`](../src/port_sim) implements the discrete mathematical state transitions and rewards, human researchers and industrial stakeholders require a full-fidelity 3D Digital Twin environment to visualize congestion points, rehandling maneuvers, and vessel turnaround times.
+As codified in [`docs/PURPOSE.md`](../PURPOSE.md) and [`DREAM.txt`](../../DREAM.txt), the RAMemory platform develops a centralized "air traffic control" brain for multi-agent autonomous mobile robots (AGVs/AMRs) operating in automated fulfillment centers. This digital twin simulates the physical warehouse topology, 4-way intersection conflicts, and under-chassis pod transport.
 
 ### Goals & Acceptance Criteria
-- [x] Full Godot 4 project skeleton initialized under [`godot/`](../../godot) with zero Python repository contamination.
-- [x] Procedural yard generator ([`godot/scripts/environment/procedural_yard.gd`](../../godot/scripts/environment/procedural_yard.gd)) automatically constructing blocks, bays, stacks, and tiers matching [`src/port_sim/config.py`](../src/port_sim/config.py).
-- [x] Standardized 20ft ISO container entity ([`godot/scenes/entities/container.tscn`](../../godot/scenes/entities/container.tscn)) with dynamic PBR materials color-coded by type (Import = Blue, Export = Green, Transshipment = Amber).
-- [x] 3D Infrastructure: Berth dock, water plane with custom wave shader, moored container vessel, STS quay crane, and AGV platform.
-- [x] RTS Simulation Camera Rig supporting WASD panning, mouse orbit/tilt, wheel zoom, and isometric/top-down preset angles (`1`, `2`, `3`).
-- [x] Industrial HUD overlay displaying real-time KPIs (Step, Sim Time, Accumulated Reward) and simulation controls (Step, Auto-Run, Reset).
-- [x] Zero-dependency Python WebSocket server ([`src/utils/godot_bridge.py`](../src/utils/godot_bridge.py)) streaming live telemetry to Godot over `ws://127.0.0.1:9090`.
+- [x] Full Godot 4 project skeleton initialized under [`godot/`](../../godot) with zero Python repository coupling.
+- [x] High-detail warehouse floor with bidirectional lanes, green pedestrian walkways, and crosshatched 4-way intersection conflict zones.
+- [x] Procedural racking generator ([`procedural_warehouse.gd`](../../godot/scripts/environment/procedural_warehouse.gd)) constructing storage aisles and spawning mobile shelf pods.
+- [x] 4-Tier mobile shelf pods ([`shelf_pod.tscn`](../../godot/scenes/environment/shelf_pod.tscn)) with clearance for AMR entry and dynamic lifting.
+- [x] Autonomous Lifter AMR ([`amr_robot.tscn`](../../godot/scenes/entities/amr_robot.tscn)) with elevating turntable, 3D billboard status tag, and 360° LED ring indicating real-time states (Green = Cruising, Yellow = Yielding at Intersection, Red = Safety Stop, Blue = Lifting, Cyan = Charging).
+- [x] Goods-to-Person pick stations and automated floor contact charging docks.
+- [x] Warehouse KPI HUD displaying Pick Rate (+15-25%), Active Fleet count, Deadlock Count (0), and Deadheading distance ratio.
+- [x] Zero-dependency Python VDA 5050 WebSocket bridge server ([`src/utils/warehouse_bridge.py`](../src/utils/warehouse_bridge.py)).
 
 ---
 
-## 2. Input & Output Contracts
+## 2. VDA 5050 Telemetry Stream Schema
 
-### Telemetry Stream Schema (`Python -> Godot`)
 Broadcast over WebSocket port `9090`:
 ```json
 {
+  "vda5050_topic": "vda5050/v2/warehouse/state",
   "step": 42,
-  "sim_time": 42.0,
-  "reward": 10.0,
-  "accum_reward": 320.0,
-  "yard_grid": [
-    [
-      [
-        [{"id": 101, "type": 0}, {"id": 102, "type": 1}, null],
-        [null, null, null]
-      ]
-    ]
-  ],
-  "event": "Step 42: Action 14 -> Reward +10.00",
-  "active_ships": 1,
-  "pending_containers": 12
+  "pick_rate_boost": 22.5,
+  "deadlocks": 0,
+  "deadheading_ratio": 13.8,
+  "active_fleet_count": 4,
+  "event": "VDA 5050 Order #43 Dispatched: AMR-03 -> Pod #3 -> Pick Station #1",
+  "fleet": {
+    "AMR-01": {"state": "CRUISING", "battery": 96.0, "x": -25.0, "z": 0.0},
+    "AMR-02": {"state": "YIELDING", "battery": 94.0, "x": 0.0, "z": -8.0},
+    "AMR-03": {"state": "TRANSPORTING", "battery": 98.0, "x": 18.0, "z": -10.0},
+    "AMR-04": {"state": "CHARGING", "battery": 72.0, "x": -20.0, "z": -28.0}
+  }
 }
 ```
 
-### Command Protocol (`Godot -> Python`)
-Sent from Godot client to Python bridge:
-```json
-{"command": "step"}
-{"command": "reset"}
-{"command": "auto_run", "enabled": true}
-```
-
 ---
 
-## 3. Scene Hierarchy & Directory Map
+## 3. Verification & Run Instructions
 
-```text
-godot/
-├── project.godot                          # Godot 4.3 configuration
-├── icon.svg                               # Application icon
-├── scenes/
-│   ├── main.tscn                          # Master integrated scene
-│   ├── environment/
-│   │   ├── water.tscn                     # PBR wave water surface
-│   │   ├── berth.tscn                     # Concrete apron & crane tracks
-│   │   └── yard_grid.tscn                 # Procedural yard container grid
-│   ├── entities/
-│   │   ├── container.tscn                 # 20ft ISO container with PBR material
-│   │   ├── quay_crane.tscn                # STS Gantry crane
-│   │   ├── agv.tscn                       # Autonomous mobile platform
-│   │   └── ship.tscn                      # Moored cargo vessel
-│   └── ui/
-│       ├── camera_controller.tscn         # RTS camera rig
-│       └── hud.tscn                       # KPI dashboard & controls
-└── scripts/
-    ├── main.gd                            # Master controller
-    ├── bridge/
-    │   └── sim_client.gd                  # WebSocket client
-    ├── environment/
-    │   ├── procedural_yard.gd             # Procedural slot generation
-    │   └── water_shader.gdshader          # Vertex wave shader
-    ├── entities/
-    │   ├── container.gd                   # PBR material & animations
-    │   ├── quay_crane.gd                  # 3-axis crane kinematics
-    │   ├── agv_agent.gd                   # Vehicle navigation
-    │   └── ship.gd                        # Vessel cargo state
-    └── ui/
-        ├── camera_rig.gd                  # Orbit / pan / zoom
-        └── hud.gd                         # Telemetry & event log
-```
-
----
-
-## 4. Execution & Verification
-
-### Running the Python Bridge
 ```bash
-python src/utils/godot_bridge.py --scenario default
-```
+# Terminal 1: Run Python VDA 5050 Bridge
+python src/utils/warehouse_bridge.py
 
-### Launching the 3D Digital Twin
-Open [`godot/project.godot`](../../godot/project.godot) in the Godot 4 Editor or run via command line:
-```bash
+# Terminal 2: Run Godot Digital Twin
 godot --path godot/
 ```
