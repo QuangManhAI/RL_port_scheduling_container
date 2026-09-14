@@ -1,53 +1,71 @@
-[gd_scene load_steps=12 format=3 uid="uid://dmx3whfloor001"]
+[gd_scene load_steps=18 format=3 uid="uid://dmx3whfloor002"]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
-albedo_color = Color(0.18, 0.20, 0.22, 1)
-roughness = 0.35
-metallic = 0.08
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_epoxy_floor"]
+albedo_color = Color(0.8, 0.82, 0.85, 1)
+roughness = 0.7
+metallic = 0.0
 
 [sub_resource type="BoxMesh" id="BoxMesh_floor"]
-material = SubResource("StandardMaterial3D_floor")
+material = SubResource("StandardMaterial3D_epoxy_floor")
 size = Vector3(140, 1, 100)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wall"]
-albedo_color = Color(0.12, 0.14, 0.16, 1)
+albedo_color = Color(0.72, 0.75, 0.78, 1)
 roughness = 0.8
+metallic = 0.0
 
 [sub_resource type="BoxMesh" id="BoxMesh_wall_long"]
 material = SubResource("StandardMaterial3D_wall")
-size = Vector3(140, 14, 1)
+size = Vector3(140, 16, 1)
 
 [sub_resource type="BoxMesh" id="BoxMesh_wall_short"]
 material = SubResource("StandardMaterial3D_wall")
-size = Vector3(1, 14, 100)
+size = Vector3(1, 16, 100)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_lane"]
-albedo_color = Color(0.95, 0.75, 0.1, 1)
-roughness = 0.4
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_truss"]
+albedo_color = Color(0.6, 0.64, 0.68, 1)
+roughness = 0.5
+metallic = 0.4
+
+[sub_resource type="BoxMesh" id="BoxMesh_truss_beam"]
+material = SubResource("StandardMaterial3D_truss")
+size = Vector3(140, 0.8, 0.8)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_lane_yellow"]
+albedo_color = Color(0.85, 0.68, 0.1, 1)
+roughness = 0.5
 
 [sub_resource type="BoxMesh" id="BoxMesh_lane_x"]
-material = SubResource("StandardMaterial3D_lane")
-size = Vector3(120, 0.02, 0.3)
+material = SubResource("StandardMaterial3D_lane_yellow")
+size = Vector3(120, 0.02, 0.45)
 
 [sub_resource type="BoxMesh" id="BoxMesh_lane_z"]
-material = SubResource("StandardMaterial3D_lane")
-size = Vector3(0.3, 0.02, 80)
+material = SubResource("StandardMaterial3D_lane_yellow")
+size = Vector3(0.45, 0.02, 80)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_intersect"]
-albedo_color = Color(0.9, 0.5, 0.1, 1)
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hazard_stripes"]
+albedo_color = Color(0.85, 0.48, 0.1, 1)
 roughness = 0.5
 
 [sub_resource type="BoxMesh" id="BoxMesh_intersect"]
-material = SubResource("StandardMaterial3D_intersect")
-size = Vector3(12, 0.02, 12)
+material = SubResource("StandardMaterial3D_hazard_stripes")
+size = Vector3(14, 0.02, 14)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_walkway"]
-albedo_color = Color(0.1, 0.6, 0.35, 1)
-roughness = 0.6
+albedo_color = Color(0.12, 0.55, 0.35, 1)
+roughness = 0.5
 
 [sub_resource type="BoxMesh" id="BoxMesh_walkway"]
 material = SubResource("StandardMaterial3D_walkway")
-size = Vector3(120, 0.02, 1.8)
+size = Vector3(120, 0.02, 2.2)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_qr_marker"]
+albedo_color = Color(0.3, 0.55, 0.75, 1)
+roughness = 0.5
+
+[sub_resource type="BoxMesh" id="BoxMesh_qr_dot"]
+material = SubResource("StandardMaterial3D_qr_marker")
+size = Vector3(0.35, 0.025, 0.35)
 
 [node name="WarehouseFloor" type="Node3D"]
 
@@ -56,20 +74,32 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 mesh = SubResource("BoxMesh_floor")
 
 [node name="WallNorth" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 7, -50)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8, -50)
 mesh = SubResource("BoxMesh_wall_long")
 
 [node name="WallSouth" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 7, 50)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8, 50)
 mesh = SubResource("BoxMesh_wall_long")
 
 [node name="WallWest" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -70, 7, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -70, 8, 0)
 mesh = SubResource("BoxMesh_wall_short")
 
 [node name="WallEast" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 70, 7, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 70, 8, 0)
 mesh = SubResource("BoxMesh_wall_short")
+
+[node name="RoofTruss1" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 16, -25)
+mesh = SubResource("BoxMesh_truss_beam")
+
+[node name="RoofTruss2" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 16, 0)
+mesh = SubResource("BoxMesh_truss_beam")
+
+[node name="RoofTruss3" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 16, 25)
+mesh = SubResource("BoxMesh_truss_beam")
 
 [node name="MainAisleX" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.01, 0)
@@ -86,3 +116,23 @@ mesh = SubResource("BoxMesh_intersect")
 [node name="PedestrianGreenSafetyWalkway" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.012, 38)
 mesh = SubResource("BoxMesh_walkway")
+
+[node name="QR_Dot_Center" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, 0)
+mesh = SubResource("BoxMesh_qr_dot")
+
+[node name="QR_Dot_West" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12, 0.02, 0)
+mesh = SubResource("BoxMesh_qr_dot")
+
+[node name="QR_Dot_East" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 0.02, 0)
+mesh = SubResource("BoxMesh_qr_dot")
+
+[node name="QR_Dot_North" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, -12)
+mesh = SubResource("BoxMesh_qr_dot")
+
+[node name="QR_Dot_South" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, 12)
+mesh = SubResource("BoxMesh_qr_dot")

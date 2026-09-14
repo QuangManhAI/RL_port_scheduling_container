@@ -161,6 +161,12 @@ class WarehouseFleetOrchestrator:
             "deadheading_ratio": self.deadheading_ratio,
             "active_fleet_count": 4,
             "event": event_msg,
+            "zones": {
+                "Zone A": {"category": "FMCG", "tiers": 4, "stock_count": 32},
+                "Zone B": {"category": "TECH", "tiers": 4, "stock_count": 32},
+                "Zone C": {"category": "PHARMA", "tiers": 4, "stock_count": 32},
+                "Zone D": {"category": "BULKY", "tiers": 4, "stock_count": 32},
+            },
             "fleet": {
                 "AMR-01": {"state": "CRUISING", "battery": 96.0, "x": -25.0, "z": 0.0},
                 "AMR-02": {"state": "CRUISING", "battery": 94.0, "x": 0.0, "z": -25.0},
@@ -186,7 +192,10 @@ async def main() -> None:
         elif cmd == "dispatch":
             orchestrator.step_count += 1
             orchestrator.orders_completed += 1
-            await server.broadcast(orchestrator.get_state_snapshot(f"VDA 5050 Order #{orchestrator.orders_completed} Dispatched."))
+            dispatch_type = msg.get("type", "manifest")
+            order_id = msg.get("order_id", f"#{orchestrator.orders_completed}")
+            event_text = f"VDA 5050 [{dispatch_type.upper()}] Order {order_id} Processed."
+            await server.broadcast(orchestrator.get_state_snapshot(event_text))
 
     server.message_handler = handle_message
     await server.start()

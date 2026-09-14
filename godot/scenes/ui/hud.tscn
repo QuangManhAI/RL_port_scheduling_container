@@ -1,6 +1,74 @@
-[gd_scene load_steps=2 format=3 uid="uid://dmx3whhud001"]
+[gd_scene load_steps=9 format=3 uid="uid://dmx3whhud003"]
 
 [ext_resource type="Script" path="res://scripts/ui/hud.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/ui/radar_map.gd" id="2_radar"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_glass_panel"]
+bg_color = Color(0.05, 0.08, 0.13, 0.9)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.18, 0.38, 0.6, 0.75)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card"]
+bg_color = Color(0.08, 0.12, 0.18, 0.7)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.2, 0.45, 0.7, 0.5)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_inbound"]
+bg_color = Color(0.0, 0.4, 0.7, 0.95)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.0, 0.85, 1.0, 0.9)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_outbound"]
+bg_color = Color(0.05, 0.5, 0.3, 0.95)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.1, 0.95, 0.45, 0.9)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_accent"]
+bg_color = Color(0.85, 0.45, 0.05, 0.9)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(1.0, 0.7, 0.2, 1.0)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bar_fill"]
+bg_color = Color(0.0, 0.9, 0.45, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
 
 [node name="HUD" type="Control"]
 layout_mode = 3
@@ -16,21 +84,34 @@ script = ExtResource("1_script")
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
-offset_bottom = 75.0
+offset_bottom = 76.0
 grow_horizontal = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_glass_panel")
 
-[node name="Title" type="Label" parent="TopBar"]
+[node name="TitleBox" type="VBoxContainer" parent="TopBar"]
 layout_mode = 1
 anchors_preset = 4
 anchor_top = 0.5
 anchor_bottom = 0.5
-offset_left = 24.0
-offset_top = -20.0
-offset_right = 440.0
-offset_bottom = 20.0
+offset_left = 20.0
+offset_top = -24.0
+offset_right = 360.0
+offset_bottom = 24.0
 grow_vertical = 2
-theme_override_font_sizes/font_size = 20
-text = "RAMemory Smart Warehouse Digital Twin"
+alignment = 1
+
+[node name="Title" type="Label" parent="TopBar/TitleBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.96, 1.0, 1)
+theme_override_font_sizes/font_size = 17
+text = "RAMEMORY FLEET ORCHESTRATOR"
+vertical_alignment = 1
+
+[node name="Subtitle" type="Label" parent="TopBar/TitleBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.0, 0.85, 1.0, 1)
+theme_override_font_sizes/font_size = 11
+text = "Zoned Multi-Tier Storage • Inbound/Outbound Manifests • VDA 5050"
 vertical_alignment = 1
 
 [node name="ConnectionBadge" type="Label" parent="TopBar"]
@@ -40,13 +121,13 @@ anchor_left = 1.0
 anchor_top = 0.5
 anchor_right = 1.0
 anchor_bottom = 0.5
-offset_left = -280.0
+offset_left = -270.0
 offset_top = -14.0
-offset_right = -24.0
+offset_right = -20.0
 offset_bottom = 14.0
 grow_horizontal = 0
 grow_vertical = 2
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 13
 text = "○ STANDALONE DIGITAL TWIN"
 horizontal_alignment = 2
 vertical_alignment = 1
@@ -58,13 +139,13 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -320.0
-offset_top = -24.0
-offset_right = 320.0
-offset_bottom = 24.0
+offset_left = -340.0
+offset_top = -26.0
+offset_right = 340.0
+offset_bottom = 26.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 36
+theme_override_constants/separation = 26
 alignment = 1
 
 [node name="CardPickRate" type="VBoxContainer" parent="TopBar/KPIContainer"]
@@ -73,15 +154,15 @@ alignment = 1
 
 [node name="Title" type="Label" parent="TopBar/KPIContainer/CardPickRate"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
-theme_override_font_sizes/font_size = 11
-text = "PICK RATE (TARGET: +15-25%)"
+theme_override_colors/font_color = Color(0.65, 0.75, 0.85, 1)
+theme_override_font_sizes/font_size = 10
+text = "PICK RATE (+15-25%)"
 horizontal_alignment = 1
 
 [node name="ValPickRate" type="Label" parent="TopBar/KPIContainer/CardPickRate"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.2, 0.9, 0.4, 1)
-theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.1, 0.95, 0.4, 1)
+theme_override_font_sizes/font_size = 17
 text = "+22.5%"
 horizontal_alignment = 1
 
@@ -91,14 +172,15 @@ alignment = 1
 
 [node name="Title" type="Label" parent="TopBar/KPIContainer/CardFleet"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.65, 0.75, 0.85, 1)
+theme_override_font_sizes/font_size = 10
 text = "ACTIVE AMR FLEET"
 horizontal_alignment = 1
 
 [node name="ValFleet" type="Label" parent="TopBar/KPIContainer/CardFleet"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.0, 0.85, 1.0, 1)
+theme_override_font_sizes/font_size = 17
 text = "4 AMRs"
 horizontal_alignment = 1
 
@@ -108,16 +190,16 @@ alignment = 1
 
 [node name="Title" type="Label" parent="TopBar/KPIContainer/CardDeadlocks"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
-theme_override_font_sizes/font_size = 11
-text = "DEADLOCK COUNT"
+theme_override_colors/font_color = Color(0.65, 0.75, 0.85, 1)
+theme_override_font_sizes/font_size = 10
+text = "INTERSECTION DEADLOCKS"
 horizontal_alignment = 1
 
 [node name="ValDeadlocks" type="Label" parent="TopBar/KPIContainer/CardDeadlocks"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.3, 0.8, 1.0, 1)
-theme_override_font_sizes/font_size = 18
-text = "0 (100% Anti-Deadlock)"
+theme_override_colors/font_color = Color(0.2, 0.9, 1.0, 1)
+theme_override_font_sizes/font_size = 17
+text = "0 (Anti-Deadlock)"
 horizontal_alignment = 1
 
 [node name="CardDeadheading" type="VBoxContainer" parent="TopBar/KPIContainer"]
@@ -126,16 +208,268 @@ alignment = 1
 
 [node name="Title" type="Label" parent="TopBar/KPIContainer/CardDeadheading"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
-theme_override_font_sizes/font_size = 11
-text = "DEADHEADING RATIO"
+theme_override_colors/font_color = Color(0.65, 0.75, 0.85, 1)
+theme_override_font_sizes/font_size = 10
+text = "DEADHEADING"
 horizontal_alignment = 1
 
 [node name="ValDeadheading" type="Label" parent="TopBar/KPIContainer/CardDeadheading"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1.0, 0.75, 0.1, 1)
+theme_override_font_sizes/font_size = 17
 text = "13.8%"
 horizontal_alignment = 1
+
+[node name="CardOrders" type="VBoxContainer" parent="TopBar/KPIContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="Title" type="Label" parent="TopBar/KPIContainer/CardOrders"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.75, 0.85, 1)
+theme_override_font_sizes/font_size = 10
+text = "TOTAL MANIFESTS"
+horizontal_alignment = 1
+
+[node name="ValOrders" type="Label" parent="TopBar/KPIContainer/CardOrders"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85, 0.45, 1.0, 1)
+theme_override_font_sizes/font_size = 17
+text = "42 Batches"
+horizontal_alignment = 1
+
+[node name="RadarPanel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -260.0
+offset_top = 86.0
+offset_right = -16.0
+offset_bottom = 270.0
+grow_horizontal = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_glass_panel")
+
+[node name="RadarMap" type="Control" parent="RadarPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("2_radar")
+
+[node name="FleetPanel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -260.0
+offset_top = 280.0
+offset_right = -16.0
+offset_bottom = 546.0
+grow_horizontal = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_glass_panel")
+
+[node name="Header" type="Label" parent="FleetPanel"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 12.0
+offset_top = 8.0
+offset_bottom = 26.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.0, 0.85, 1.0, 1)
+theme_override_font_sizes/font_size = 11
+text = "AMR FLEET TELEMETRY"
+
+[node name="FleetList" type="VBoxContainer" parent="FleetPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 32.0
+offset_right = -10.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 8
+
+[node name="CardAMR1" type="VBoxContainer" parent="FleetPanel/FleetList"]
+layout_mode = 2
+
+[node name="Info" type="Label" parent="FleetPanel/FleetList/CardAMR1"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "AMR-01: CRUISING | 1.8 m/s"
+
+[node name="BatteryBar" type="ProgressBar" parent="FleetPanel/FleetList/CardAMR1"]
+custom_minimum_size = Vector2(0, 6)
+layout_mode = 2
+theme_override_styles/fill = SubResource("StyleBoxFlat_bar_fill")
+value = 96.0
+show_percentage = false
+
+[node name="CardAMR2" type="VBoxContainer" parent="FleetPanel/FleetList"]
+layout_mode = 2
+
+[node name="Info" type="Label" parent="FleetPanel/FleetList/CardAMR2"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "AMR-02: CRUISING | 1.8 m/s"
+
+[node name="BatteryBar" type="ProgressBar" parent="FleetPanel/FleetList/CardAMR2"]
+custom_minimum_size = Vector2(0, 6)
+layout_mode = 2
+theme_override_styles/fill = SubResource("StyleBoxFlat_bar_fill")
+value = 94.0
+show_percentage = false
+
+[node name="CardAMR3" type="VBoxContainer" parent="FleetPanel/FleetList"]
+layout_mode = 2
+
+[node name="Info" type="Label" parent="FleetPanel/FleetList/CardAMR3"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "AMR-03: STANDBY | 0.0 m/s"
+
+[node name="BatteryBar" type="ProgressBar" parent="FleetPanel/FleetList/CardAMR3"]
+custom_minimum_size = Vector2(0, 6)
+layout_mode = 2
+theme_override_styles/fill = SubResource("StyleBoxFlat_bar_fill")
+value = 98.0
+show_percentage = false
+
+[node name="CardAMR4" type="VBoxContainer" parent="FleetPanel/FleetList"]
+layout_mode = 2
+
+[node name="Info" type="Label" parent="FleetPanel/FleetList/CardAMR4"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "AMR-04: CHARGING | 0.0 m/s"
+
+[node name="BatteryBar" type="ProgressBar" parent="FleetPanel/FleetList/CardAMR4"]
+custom_minimum_size = Vector2(0, 6)
+layout_mode = 2
+theme_override_styles/fill = SubResource("StyleBoxFlat_bar_fill")
+value = 72.0
+show_percentage = false
+
+[node name="ManifestPanel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 0
+offset_left = 20.0
+offset_top = 86.0
+offset_right = 450.0
+offset_bottom = 270.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_glass_panel")
+
+[node name="ManifestContent" type="HBoxContainer" parent="ManifestPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 8.0
+offset_right = -12.0
+offset_bottom = -8.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 16
+
+[node name="InboundList" type="VBoxContainer" parent="ManifestPanel/ManifestContent"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="TitleIn" type="Label" parent="ManifestPanel/ManifestContent/InboundList"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.0, 0.85, 1.0, 1)
+theme_override_font_sizes/font_size = 11
+text = "📥 INBOUND (NHẬN VÀO)"
+
+[node name="Item1" type="Label" parent="ManifestPanel/ManifestContent/InboundList"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.9, 1.0, 1)
+theme_override_font_sizes/font_size = 10
+text = "PO-101: FMCG -> Zone A [Tier 2]"
+
+[node name="Item2" type="Label" parent="ManifestPanel/ManifestContent/InboundList"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.9, 1.0, 1)
+theme_override_font_sizes/font_size = 10
+text = "PO-102: Tech -> Zone B [Tier 1]"
+
+[node name="Item3" type="Label" parent="ManifestPanel/ManifestContent/InboundList"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.9, 1.0, 1)
+theme_override_font_sizes/font_size = 10
+text = "PO-103: Pharma -> Zone C [Tier 3]"
+
+[node name="OutboundList" type="VBoxContainer" parent="ManifestPanel/ManifestContent"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="TitleOut" type="Label" parent="ManifestPanel/ManifestContent/OutboundList"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.1, 0.95, 0.45, 1)
+theme_override_font_sizes/font_size = 11
+text = "📤 OUTBOUND (LẤY RA)"
+
+[node name="Item1" type="Label" parent="ManifestPanel/ManifestContent/OutboundList"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 1.0, 0.85, 1)
+theme_override_font_sizes/font_size = 10
+text = "SO-501: Pick Zone A -> Stn 1"
+
+[node name="Item2" type="Label" parent="ManifestPanel/ManifestContent/OutboundList"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 1.0, 0.85, 1)
+theme_override_font_sizes/font_size = 10
+text = "SO-502: Pick Zone B -> Stn 2"
+
+[node name="Item3" type="Label" parent="ManifestPanel/ManifestContent/OutboundList"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 1.0, 0.85, 1)
+theme_override_font_sizes/font_size = 10
+text = "SO-503: Pick Zone D -> Stn 1"
+
+[node name="AiInspectorPanel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -220.0
+offset_top = 86.0
+offset_right = 220.0
+offset_bottom = 146.0
+grow_horizontal = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_glass_panel")
+
+[node name="Content" type="VBoxContainer" parent="AiInspectorPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 8.0
+offset_right = -12.0
+offset_bottom = -8.0
+grow_horizontal = 2
+grow_vertical = 2
+alignment = 1
+
+[node name="ValMarl" type="Label" parent="AiInspectorPanel/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.0, 0.9, 1.0, 1)
+theme_override_font_sizes/font_size = 11
+text = "MARL Dynamic Flow: Clear (All routes optimal across 4 zones)"
+
+[node name="ValGuardrail" type="Label" parent="AiInspectorPanel/Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.2, 0.95, 0.4, 1)
+theme_override_font_sizes/font_size = 11
+text = "OR Safety Guardrail: 100% Deterministic Collision Prevention PASS"
 
 [node name="BottomBar" type="Panel" parent="."]
 layout_mode = 1
@@ -143,9 +477,10 @@ anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = -65.0
+offset_top = -68.0
 grow_horizontal = 2
 grow_vertical = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_glass_panel")
 
 [node name="Controls" type="HBoxContainer" parent="BottomBar"]
 layout_mode = 1
@@ -154,34 +489,68 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -280.0
-offset_top = -20.0
-offset_right = 280.0
-offset_bottom = 20.0
+offset_left = -460.0
+offset_top = -19.0
+offset_right = 460.0
+offset_bottom = 19.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 18
+theme_override_constants/separation = 10
 alignment = 1
 
-[node name="BtnDispatch" type="Button" parent="BottomBar/Controls"]
-custom_minimum_size = Vector2(130, 36)
+[node name="BtnInbound" type="Button" parent="BottomBar/Controls"]
+custom_minimum_size = Vector2(140, 36)
 layout_mode = 2
-text = "Dispatch Order"
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_inbound")
+text = "📥 Nhập Hàng (In)"
+
+[node name="BtnOutbound" type="Button" parent="BottomBar/Controls"]
+custom_minimum_size = Vector2(140, 36)
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_outbound")
+text = "📤 Xuất Hàng (Out)"
 
 [node name="BtnConflict" type="Button" parent="BottomBar/Controls"]
 custom_minimum_size = Vector2(160, 36)
 layout_mode = 2
-text = "Simulate 4-Way Conflict"
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_accent")
+text = "⚡ 4-Way Conflict Demo"
 
 [node name="BtnAuto" type="Button" parent="BottomBar/Controls"]
-custom_minimum_size = Vector2(120, 36)
+custom_minimum_size = Vector2(110, 36)
 layout_mode = 2
-text = "Auto Fleet Run"
+theme_override_styles/normal = SubResource("StyleBoxFlat_card")
+text = "🔄 Auto In/Out"
+
+[node name="BtnCam1" type="Button" parent="BottomBar/Controls"]
+custom_minimum_size = Vector2(80, 36)
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_card")
+text = "📷 [1] Iso"
+
+[node name="BtnCam2" type="Button" parent="BottomBar/Controls"]
+custom_minimum_size = Vector2(80, 36)
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_card")
+text = "📷 [2] 2D"
+
+[node name="BtnCam3" type="Button" parent="BottomBar/Controls"]
+custom_minimum_size = Vector2(85, 36)
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_card")
+text = "📷 [3] Pick"
+
+[node name="BtnCam4" type="Button" parent="BottomBar/Controls"]
+custom_minimum_size = Vector2(85, 36)
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_card")
+text = "📷 [4] Inbound"
 
 [node name="BtnReset" type="Button" parent="BottomBar/Controls"]
-custom_minimum_size = Vector2(100, 36)
+custom_minimum_size = Vector2(75, 36)
 layout_mode = 2
-text = "Reset Floor"
+theme_override_styles/normal = SubResource("StyleBoxFlat_card")
+text = "↺ Reset"
 
 [node name="LogPanel" type="Panel" parent="."]
 layout_mode = 1
@@ -190,9 +559,10 @@ anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 20.0
 offset_top = -240.0
-offset_right = 420.0
-offset_bottom = -80.0
+offset_right = 450.0
+offset_bottom = -78.0
 grow_vertical = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_glass_panel")
 
 [node name="LogBox" type="RichTextLabel" parent="LogPanel"]
 layout_mode = 1

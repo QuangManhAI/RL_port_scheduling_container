@@ -88,8 +88,11 @@ func set_view_pick_station() -> void:
 	_current_zoom = 22.0
 
 func set_view_charging_dock() -> void:
+	set_view_inbound_dock()
+
+func set_view_inbound_dock() -> void:
 	var tween: Tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tween.tween_property(self, "global_position", Vector3(-24.0, 0.0, -20.0), 0.6)
-	tween.tween_property(self, "rotation:y", deg_to_rad(45.0), 0.6)
+	tween.tween_property(self, "global_position", Vector3(0.0, 0.0, -30.0), 0.6)
+	tween.tween_property(self, "rotation:y", deg_to_rad(180.0), 0.6)
 	tween.tween_property(elevation_pivot, "rotation:x", deg_to_rad(-30.0), 0.6)
 	_current_zoom = 24.0
