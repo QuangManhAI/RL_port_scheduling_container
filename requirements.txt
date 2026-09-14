@@ -1,3 +1,18 @@
-gymnasium>=0.29
-numpy>=1.23
-pytest>=7.0
+# ==============================================================================
+# Deep Learning Template — Requirements Proxy
+# ==============================================================================
+# This proxy file references the tiered development environment.
+#
+# Standard Installation (CPU / GitHub Actions CI / Default PyPI wheels):
+#   pip install -r requirements.txt
+#
+# NVIDIA GPU Workstations:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121 # or matching CUDA
+#   pip install -r requirements.txt
+#
+# Tiered Structure:
+#   requirements/base.txt -> Core scientific & PyTorch stack
+#   requirements/dev.txt  -> Developer, linting, and testing suite
+# ==============================================================================
+
+-r requirements/dev.txt
