@@ -1,0 +1,27 @@
+[gd_scene load_steps=5 format=3 uid="uid://dmx3berth001"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_concrete"]
+albedo_color = Color(0.35, 0.36, 0.38)
+roughness = 0.8
+
+[sub_resource type="BoxMesh" id="BoxMesh_apron"]
+material = SubResource("StandardMaterial3D_concrete")
+size = Vector2(200, 2, 35)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hazard"]
+albedo_color = Color(0.85, 0.72, 0.1)
+roughness = 0.6
+
+[sub_resource type="BoxMesh" id="BoxMesh_curb"]
+material = SubResource("StandardMaterial3D_hazard")
+size = Vector3(200, 0.3, 0.8)
+
+[node name="Berth" type="Node3D"]
+
+[node name="QuayApron" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, -1, -20)
+mesh = SubResource("BoxMesh_apron")
+
+[node name="WaterCurb" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0.15, -37.1)
+mesh = SubResource("BoxMesh_curb")
