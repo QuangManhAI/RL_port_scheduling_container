@@ -1,0 +1,17 @@
+[gd_scene load_steps=2 format=3 uid="uid://dmx3cam001"]
+
+[ext_resource type="Script" path="res://scripts/ui/camera_rig.gd" id="1_script"]
+
+[node name="CameraController" type="Node3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, 15)
+script = ExtResource("1_script")
+
+[node name="ElevationPivot" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 0, 0)
+
+[node name="Camera3D" type="Camera3D" parent="ElevationPivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 65)
+current = true
+fov = 45.0
+near = 0.5
+far = 500.0

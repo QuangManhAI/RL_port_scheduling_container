@@ -1,0 +1,33 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; but it can also be edited directly.
+
+config_version=5
+
+[application]
+
+config/name="Smart Port & Warehouse Digital Twin 3D"
+config/description="Interactive 3D Digital Twin & Autonomous Simulation Environment for Multi-Agent Reinforcement Learning and Container Port Logistics."
+config/version="0.1.0"
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.3", "Forward Plus")
+config/icon="res://icon.svg"
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/size/mode=0
+window/size/resizable=true
+window/vsync/vsync_mode=1
+
+[physics]
+
+3d/default_gravity=9.8
+common/physics_ticks_per_second=60
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
+anti_aliasing/quality/msaa_3d=2
+anti_aliasing/quality/screen_space_aa=1
