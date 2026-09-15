@@ -12,6 +12,7 @@ signal auto_fleet_toggled(enabled: bool)
 signal camera_preset_requested(preset_idx: int)
 signal fullscreen_toggled
 signal chase_cam_toggled
+signal cutaway_toggled
 signal spawn_dev_bot_requested(location: String)
 
 @onready var lbl_pick_rate: Label = $TopBar/KPIContainer/CardPickRate/ValPickRate
@@ -59,6 +60,8 @@ signal spawn_dev_bot_requested(location: String)
 @onready var btn_cam2: Button = $BottomBar/Controls/BtnCam2
 @onready var btn_cam3: Button = $BottomBar/Controls/BtnCam3
 @onready var btn_cam4: Button = $BottomBar/Controls/BtnCam4
+@onready var btn_cam5: Button = $BottomBar/Controls/BtnCam5
+@onready var btn_cutaway: Button = $BottomBar/Controls/BtnCutaway
 @onready var log_panel: Panel = $LogPanel
 @onready var log_box: RichTextLabel = $LogPanel/LogBox
 
@@ -126,6 +129,16 @@ func _ready() -> void:
 		btn_cam4.pressed.connect(func():
 			SoundManager.play_ui(self, SoundManager.sfx_click)
 			camera_preset_requested.emit(4)
+		)
+	if btn_cam5:
+		btn_cam5.pressed.connect(func():
+			SoundManager.play_ui(self, SoundManager.sfx_click)
+			camera_preset_requested.emit(5)
+		)
+	if btn_cutaway:
+		btn_cutaway.pressed.connect(func():
+			SoundManager.play_ui(self, SoundManager.sfx_toggle)
+			cutaway_toggled.emit()
 		)
 
 	if log_box:

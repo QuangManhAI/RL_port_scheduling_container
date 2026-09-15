@@ -1,7 +1,7 @@
 [gd_scene load_steps=13 format=3 uid="uid://dmx3whmain001"]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
-[ext_resource type="PackedScene" path="res://scenes/environment/warehouse_floor.tscn" id="2_floor"]
+[ext_resource type="PackedScene" path="res://scenes/environment/warehouse_shell.tscn" id="2_shell"]
 [ext_resource type="PackedScene" path="res://scenes/environment/warehouse_grid.tscn" id="3_grid"]
 [ext_resource type="PackedScene" path="res://scenes/entities/amr_robot.tscn" id="4_amr"]
 [ext_resource type="PackedScene" path="res://scenes/environment/pick_station.tscn" id="5_pick"]
@@ -25,9 +25,17 @@ ambient_light_source = 2
 ambient_light_color = Color(0.78, 0.82, 0.86, 1)
 ambient_light_energy = 0.55
 tonemap_mode = 2
-tonemap_exposure = 0.95
-glow_enabled = false
+tonemap_exposure = 1.0
+glow_enabled = true
+glow_intensity = 0.4
+glow_bloom = 0.15
+glow_hdr_threshold = 1.0
 ssao_enabled = true
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.005
+volumetric_fog_albedo = Color(0.92, 0.94, 0.98, 1)
+volumetric_fog_emission = Color(0.1, 0.12, 0.15, 1)
+volumetric_fog_length = 80.0
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1_main")
@@ -35,18 +43,19 @@ script = ExtResource("1_main")
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_wh")
 
-[node name="HighBayLight1" type="DirectionalLight3D" parent="."]
+[node name="SunDirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 20, 35, 20)
-light_color = Color(0.98, 0.98, 0.98, 1)
-light_energy = 0.75
+light_color = Color(0.98, 0.94, 0.88, 1)
+light_energy = 0.85
 shadow_enabled = true
+shadow_blur = 1.8
 
 [node name="HighBayLight2" type="DirectionalLight3D" parent="."]
 transform = Transform3D(-0.707107, 0, -0.707107, -0.5, 0.707107, 0.5, 0.5, 0.707107, -0.5, -20, 35, -20)
 light_color = Color(0.92, 0.95, 0.98, 1)
 light_energy = 0.35
 
-[node name="WarehouseFloor" parent="." instance=ExtResource("2_floor")]
+[node name="WarehouseShell" parent="." instance=ExtResource("2_shell")]
 
 [node name="WarehouseGrid" parent="." instance=ExtResource("3_grid")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)

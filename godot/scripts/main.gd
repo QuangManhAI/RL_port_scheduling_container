@@ -4,6 +4,7 @@ extends Node3D
 ## Coordinates Multi-Agent AMRs, Zoned Storage, Inbound Receiving & Outbound Picking Manifests.
 
 @onready var warehouse_grid: ProceduralWarehouse = $WarehouseGrid
+@onready var warehouse_shell: WarehouseShell = $WarehouseShell
 @onready var amr_1: AmrRobot = $Fleet/AMR_01
 @onready var amr_2: AmrRobot = $Fleet/AMR_02
 @onready var amr_3: AmrRobot = $Fleet/AMR_03
@@ -43,6 +44,7 @@ func _ready() -> void:
 		hud.camera_preset_requested.connect(_on_camera_preset_requested)
 		hud.fullscreen_toggled.connect(toggle_fullscreen)
 		hud.chase_cam_toggled.connect(_on_toggle_chase_cam)
+		hud.cutaway_toggled.connect(_on_toggle_cutaway)
 		hud.spawn_dev_bot_requested.connect(_on_spawn_dev_bot)
 
 	if sim_client:
@@ -53,8 +55,11 @@ func _ready() -> void:
 	_reset_entire_environment()
 	_refresh_manifest_ui()
 
-	if camera_rig and amr_1:
-		camera_rig.toggle_follow_target(amr_1)
+	if camera_rig:
+		if warehouse_shell:
+			camera_rig.warehouse_shell = warehouse_shell
+		if amr_1:
+			camera_rig.toggle_follow_target(amr_1)
 
 	hud.log_event("[color=green]🎮 ENVIRONMENT BUILDING SECTOR ACTIVE[/color]")
 	hud.log_event("[color=cyan]DEV MANUAL BOT [DEV-01] initialized at intersection (0,0). Drive freely to inspect warehouse floor![/color]")
@@ -151,6 +156,12 @@ func _on_toggle_chase_cam() -> void:
 		var is_chasing = camera_rig.toggle_follow_target(amr_1)
 		if hud:
 			hud.log_event("[color=cyan]🎥 Camera mode: %s[/color]" % ("CHASE FOLLOW [DEV-01]" if is_chasing else "FREE RTS OVERVIEW"))
+
+func _on_toggle_cutaway() -> void:
+	if warehouse_shell:
+		var is_cutaway = warehouse_shell.toggle_cutaway_mode()
+		if hud:
+			hud.log_event("[color=yellow]✂ Cutaway mode: %s[/color]" % ("OPEN INFOGRAPHIC CUTAWAY" if is_cutaway else "CLOSED ENCLOSED WAREHOUSE"))
 
 func _on_spawn_dev_bot(location: String) -> void:
 	if not amr_1:
@@ -312,12 +323,14 @@ func _on_camera_preset_requested(preset_idx: int) -> void:
 		return
 	match preset_idx:
 		1:
-			camera_rig.set_view_overview()
+			camera_rig.set_view_cutaway_chart()
 		2:
-			camera_rig.set_view_topdown()
+			camera_rig.set_view_mezzanine()
 		3:
-			camera_rig.set_view_pick_station()
+			camera_rig.set_view_topdown()
 		4:
+			camera_rig.set_view_pick_station()
+		5:
 			camera_rig.set_view_inbound_dock()
 
 func _on_server_connected() -> void:
