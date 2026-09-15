@@ -171,15 +171,7 @@ stateDiagram-v2
 ```
 
 - **Motion Sequence Rules**:
-  1. **Stationary State**: Arm folded in home resting pose ($0^\circ$ yaw, folded boom and forearm). No box in hand. Differential driving active via `WASD` / Arrow keys.
-  2. **Prepare for Pickup (`E`)**: Swivels arm to face the nearest storage rack (detects Left vs. Right side via local transform projection). Elevates to ready posture.
-  3. **Select Rack Tier (`1`, `2`, `3`, `4`)**: Adjusts shoulder, elbow, and wrist joint pitch to align with the selected rack tier elevation (Tier 1: $0.62\,\text{m}$, Tier 2: $1.18\,\text{m}$, Tier 3: $1.74\,\text{m}$, Tier 4: $2.30\,\text{m}$). Camera presets are cleanly overridden so view does not jump.
-  4. **Pick Up Box (`F`)**: Arm extends into shelf bay. Detects physical/geometric collision with shelf tote at that tier. If present, removes box from rack and grasps it with gripper (`has_gripped_box = true`). If no box, retracts and prompts player.
-  5. **Stow to Tray / Fold (`E`)**:
-     - **If box is held**: Swivels $180^\circ$ towards rear cargo tray, lowers box onto tray bed, transfers tote box to tray, and folds arm back to stationary.
-     - **If no box is held**: Folds arm directly back to stationary resting pose.
-
-### 4.4 Audio Design & Sound Effects Mapping
+### 4.3 Audio Design & Sound Effects Mapping
 
 To provide tactile, responsive operator feedback without project bloat (<300 KB total), an audio layer is configured via [`SoundManager`](../../godot/scripts/utils/sound_manager.gd):
 
@@ -192,42 +184,46 @@ To provide tactile, responsive operator feedback without project bloat (<300 KB 
 | **Rack Tier Select (1..4)** | 3D Spatial | `MenuSFX/OGG/Abstract` | `res://audio/sfx/tier_select.ogg` *(rising pitch $0.85 \rightarrow 1.33$)* |
 | **Box Grasp / Pick Latch** | 3D Spatial | `MenuSFX/OGG/Abstract` | `res://audio/sfx/box_pick.ogg` |
 | **Box Stow to Cargo Tray** | 3D Spatial | `MenuSFX/OGG/Abstract` | `res://audio/sfx/box_stow.ogg` |
-| **Hydraulic Brake Impact** | 3D Spatial | `SweetSounds_SFX/WAV` | `res://audio/sfx/brake.wav` |
+| **Hydraulic Brake / Impact** | 3D Spatial | `SweetSounds_SFX/WAV` | `res://audio/sfx/brake.wav` |
 
 ---
 
-### 4.5 Physical Collision Architecture & Dynamic Toppleable Racks
+### 4.5 Physical Collision Architecture, Dynamic Boxes & Environment Reset
 
-In the **Environment Building Sector**, all physical interactions are grounded in dynamic 3D rigid-body and kinematic collision physics:
+In the **Environment Building Sector**, all physical entities are simulated in full 3D rigid-body and kinematic collision physics:
 
 ```mermaid
 graph TD
     subgraph Godot Physical Simulation
-        Floor["Warehouse Floor & Walls (StaticBody3D)<br>Layer 1: Static Environment & Boundaries"]
+        Floor["Warehouse Floor & Walls (StaticBody3D)<br>Layer 1: Static Ground & Perimeter Walls"]
         Racks["32 Storage Pod Racks (RigidBody3D, m=280kg)<br>Layer 2: Dynamic Racks (Can Topple & Fall!)"]
         AMR["AMRs: DEV-01 & Fleet (CharacterBody3D, m=150kg)<br>Layer 3: Fleet (move_and_slide)"]
+        Totes["256 Physical Tote Boxes (RigidBody3D, m=12kg)<br>Layer 4 (bit 8): Falling, Tumbing & Bouncing Boxes"]
         Audio["SoundManager Acoustics<br>Impact thuds & crash cues"]
     end
 
     AMR -->|Gravity -9.81 m/s²| Floor
     Racks -->|Gravity -9.81 m/s² & Friction| Floor
-    AMR -->|Low Speed Brush: Friction Nudge| Racks
-    AMR -->|High Speed Ram: Overturning Moment -> Topple!| Racks
-    AMR -->|Crash Impulse Triggers Audio| Audio
+    Totes -->|Gravity -9.81 m/s² & Bounce/Friction| Floor
+    AMR -->|High Speed Ram: Overturning Torque| Racks
+    Racks -->|Topple >30° / High Impact: Spill All Boxes!| Totes
+    AMR -->|Drive & Plow into Scattered Boxes| Totes
+    Racks -->|Crash Sound Cue| Audio
 ```
 
 - **Collision Layers & Masks**:
   - **Layer 1 (`Environment_Static`)**: Ground floor ($140 \times 100\,\text{m}$) and 4 boundary perimeter walls. Supports downward gravity $\vec{g} = (0, -9.81, 0)\,\text{m/s}^2$.
   - **Layer 2 (`Racks_Dynamic`)**: 32 storage pods upgraded to **`RigidBody3D` ($m = 280\,\text{kg}$)** with custom center of mass ($y = 0.85\,\text{m}$). Racks stand firmly under normal conditions, but an AMR ramming at speed transfers momentum and creates an overturning moment, causing the rack to realistically tilt, wobble, and topple over!
-  - **Layer 3 (`AMR_Fleet`)**: AMRs upgraded to **`CharacterBody3D` with `move_and_slide()`**. Bumper collisions transfer kinetic impulse to `RigidBody3D` colliders and trigger crash SFX.
-  - **Layer 4 (`Payload_Totes`)**: Small tote boxes subject to gravity and tray boundary rails.
-  - **Layer 5 (`Arm_Gripper`)**: Articulated arm collision volume.
-  - **Layer 6 (`Sensors_LiDAR`)**: 16 horizontal raycasts detecting obstacles.
+  - **Layer 4 (`AMR_Fleet`)**: AMRs configured as **`CharacterBody3D` with `move_and_slide()`**. Bumper collisions transfer kinetic impulse to `RigidBody3D` colliders and trigger crash SFX.
+  - **Layer 8 (`Tote_Boxes`)**: 256 physical **`ToteBox` (`RigidBody3D`, $m = 12\,\text{kg}$)** nodes. Docked neatly in rack tiers while upright. When a rack is rammed at speed ($v > 1.8\,\text{m/s}$) or tilts $>30^\circ$, all 8 boxes violently spill off the shelves, tumble through the 3D space, hit the floor, bounce, and scatter across the aisle!
+  - **AMR Box Plowing**: When `DEV-01` drives into scattered boxes on the floor, the kinematic collision loop transfers momentum, plowing, nudging, and kicking boxes across the warehouse.
 
-- **Topple Mechanics & Overturning Momentum**:
-  - At low velocities ($v < 1.2\,\text{m/s}$), contact transfers minimal impulse; the rack's low center of mass restores upright equilibrium.
-  - At high velocities ($v > 2.5\,\text{m/s}$), bumper impact at $y = 0.2\,\text{m}$ exerts torque about the base exceeding the stability threshold ($\approx 28^\circ$), sending the rack crashing onto the concrete floor.
-  - When toppled (`basis.y.dot(UP) < 0.7`), the rack status updates to `[COLLAPSED / DAMAGED]`.
+- **Full Environment Reset Standard (`R` Key & HUD Reset Button)**:
+  - Triggering `_reset_entire_environment()`:
+    1. **All 32 Storage Racks**: Restored to their exact initial positions and upright transforms using `PhysicsServer3D.body_set_state` and `_integrate_forces`, zeroing linear and angular velocities, clearing the toppled status, and restoring zone labels.
+    2. **All 256 Tote Boxes**: Teleported back to their assigned shelf slots, frozen upright, velocities zeroed, and visibility restored.
+    3. **All AMRs (`DEV-01` & Fleet)**: Reset to initial berths with zero velocity, folded arm pose, cleared cargo tray, and restored HUD telemetry.
+    4. **Manifests**: Inbound and Outbound orders reset to `PENDING`.
 
 ### 4.6 RL Observation, Action & Reward Foundations
 

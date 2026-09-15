@@ -2,8 +2,8 @@ class_name ShelfPod
 extends RigidBody3D
 
 ## Mobile Multi-Tier Stackable Storage Pod.
-## Stores categorized SKU goods stacked across 4 vertical tiers (Tier 1 to Tier 4).
-## Supports dynamic physical toppling, momentum impact response, and tote inventory.
+## Stores categorized SKU goods across 4 vertical tiers (Tier 1 to Tier 4).
+## Supports dynamic physical toppling, momentum impact response, and physical ToteBox inventory.
 
 @export var pod_id: int = 1
 @export var zone_name: String = "Zone A"
@@ -13,6 +13,8 @@ extends RigidBody3D
 
 var _initial_pos: Vector3
 var _initial_basis: Basis
+var _needs_reset: bool = false
+var _zone_color: Color = Color.WHITE
 
 @onready var label_3d: Label3D = $PodLabel
 @onready var label_t1: Label3D = $LabelTier1
@@ -20,16 +22,7 @@ var _initial_basis: Basis
 @onready var label_t3: Label3D = $LabelTier3
 @onready var label_t4: Label3D = $LabelTier4
 
-@onready var tote_t1_l: MeshInstance3D = $ToteTier1_L
-@onready var tote_t1_r: MeshInstance3D = $ToteTier1_R
-@onready var tote_t2_l: MeshInstance3D = $ToteTier2_L
-@onready var tote_t2_r: MeshInstance3D = $ToteTier2_R
-@onready var tote_t3_l: MeshInstance3D = $ToteTier3_L
-@onready var tote_t3_r: MeshInstance3D = $ToteTier3_R
-@onready var tote_t4_l: MeshInstance3D = $ToteTier4_L
-@onready var tote_t4_r: MeshInstance3D = $ToteTier4_R
-
-var _tote_materials: Array[StandardMaterial3D] = []
+var _docked_boxes: Array[ToteBox] = []
 
 func _ready() -> void:
 	add_to_group("shelf_pods")
@@ -39,75 +32,63 @@ func _ready() -> void:
 func _physics_process(_delta: float) -> void:
 	if not is_lifted and not is_toppled:
 		var up_alignment: float = global_transform.basis.y.dot(Vector3.UP)
-		if up_alignment < 0.72:
+		# If tilted > 30 degrees (up_alignment < 0.86), rack is toppling!
+		if up_alignment < 0.86:
 			is_toppled = true
+			spill_all_totes()
+			SoundManager.play_spatial(self, SoundManager.sfx_brake, 2.0, 0.65)
 			if label_3d:
 				label_3d.text = "[%s]\n⚠️ RACK TOPPLED!\nSKU-%s-#%02d" % [zone_name, sku_category, pod_id]
 				label_3d.modulate = Color(1.0, 0.2, 0.2, 1.0)
+		else:
+			# Keep docked boxes aligned with rack frame
+			for box in _docked_boxes:
+				if is_instance_valid(box) and not box._is_spilled and box.freeze:
+					box.update_dock_transform()
 
-func get_tote_at(tier: int, check_pos: Vector3) -> MeshInstance3D:
-	var left_node: MeshInstance3D = null
-	var right_node: MeshInstance3D = null
-	match tier:
-		1:
-			left_node = tote_t1_l
-			right_node = tote_t1_r
-		2:
-			left_node = tote_t2_l
-			right_node = tote_t2_r
-		3:
-			left_node = tote_t3_l
-			right_node = tote_t3_r
-		4:
-			left_node = tote_t4_l
-			right_node = tote_t4_r
+func register_tote(box: ToteBox) -> void:
+	if not _docked_boxes.has(box):
+		_docked_boxes.append(box)
 
-	if not left_node or not right_node:
-		return null
-
-	var left_dist: float = left_node.global_position.distance_to(check_pos)
-	var right_dist: float = right_node.global_position.distance_to(check_pos)
-
-	if left_dist < right_dist:
-		if left_node.visible:
-			return left_node
-		elif right_node.visible:
-			return right_node
-	else:
-		if right_node.visible:
-			return right_node
-		elif left_node.visible:
-			return left_node
-	return null
+func spill_all_totes() -> void:
+	for box in _docked_boxes:
+		if is_instance_valid(box) and box.visible and not box._is_spilled:
+			box.spill_from_rack()
 
 func pick_tote(tier: int, check_pos: Vector3) -> Dictionary:
-	var tote: MeshInstance3D = get_tote_at(tier, check_pos)
-	if tote and tote.visible:
-		tote.visible = false
+	var best_box: ToteBox = null
+	var min_dist: float = 3.5
+
+	for box in _docked_boxes:
+		if is_instance_valid(box) and box.visible and not box._is_spilled and box.tier == tier:
+			var d: float = box.global_position.distance_to(check_pos)
+			if d < min_dist:
+				min_dist = d
+				best_box = box
+
+	if best_box:
+		best_box.visible = false
+		best_box.freeze = true
 		return {
 			"found": true,
-			"material": tote.material_override,
+			"material": best_box._material,
 			"tier": tier,
-			"sku_zone": zone_name
+			"sku_zone": zone_name,
+			"box_node": best_box
 		}
+
 	return {"found": false}
-
-func reset_totes() -> void:
-	for t in [tote_t1_l, tote_t1_r, tote_t2_l, tote_t2_r, tote_t3_l, tote_t3_r, tote_t4_l, tote_t4_r]:
-		if t:
-			t.visible = true
-
 
 func setup(p_id: int, p_zone: String = "Zone A", p_cat: String = "FMCG", zone_col: Color = Color(0.0, 0.8, 1.0)) -> void:
 	pod_id = p_id
 	zone_name = p_zone
 	sku_category = p_cat
+	_zone_color = zone_col
 
 	if label_3d:
 		label_3d.text = "[%s]\nSKU-%s-#%02d\n▼ T1 / T2 / T3 / T4 ▼" % [zone_name, sku_category, pod_id]
 		label_3d.modulate = zone_col
 
-	# Set tier labels to match zone accent
 	if label_t1: label_t1.modulate = Color(0.1, 0.45, 0.85)
 	if label_t2: label_t2.modulate = Color(0.0, 0.75, 0.95)
 	if label_t3: label_t3.modulate = Color(0.95, 0.6, 0.1)
@@ -117,14 +98,26 @@ func reset_rack() -> void:
 	is_toppled = false
 	is_lifted = false
 	freeze = false
+	_needs_reset = true
+
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
-	global_position = _initial_pos
-	global_transform.basis = _initial_basis
-	reset_totes()
+
+	PhysicsServer3D.body_set_state(get_rid(), PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, Vector3.ZERO)
+	PhysicsServer3D.body_set_state(get_rid(), PhysicsServer3D.BODY_STATE_ANGULAR_VELOCITY, Vector3.ZERO)
+	PhysicsServer3D.body_set_state(get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, Transform3D(_initial_basis, _initial_pos))
+	global_transform = Transform3D(_initial_basis, _initial_pos)
+
 	if label_3d:
 		label_3d.text = "[%s]\nSKU-%s-#%02d\n▼ T1 / T2 / T3 / T4 ▼" % [zone_name, sku_category, pod_id]
-		label_3d.modulate = Color.WHITE
+		label_3d.modulate = _zone_color
+
+func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
+	if _needs_reset:
+		state.transform = Transform3D(_initial_basis, _initial_pos)
+		state.linear_velocity = Vector3.ZERO
+		state.angular_velocity = Vector3.ZERO
+		_needs_reset = false
 
 func lift_by_amr(amr_turntable: Node3D) -> Tween:
 	freeze = true

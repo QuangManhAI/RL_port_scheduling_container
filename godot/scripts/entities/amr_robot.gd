@@ -191,20 +191,29 @@ func _process_manual_driving(delta: float) -> void:
 	# Execute kinematic physics motion
 	move_and_slide()
 
-	# Dynamic impact physics with RigidBody3D obstacles (e.g. Storage Racks)
+	# Dynamic impact physics with RigidBody3D obstacles (Storage Racks and Tote Boxes)
 	for i in range(get_slide_collision_count()):
 		var col: KinematicCollision3D = get_slide_collision(i)
 		var collider = col.get_collider()
 		if collider is RigidBody3D:
 			var impact_speed: float = abs(_manual_linear_vel)
 			var impulse_dir: Vector3 = -col.get_normal()
-			# Off-center impact generates strong rotational torque that topples the rack if rammed at speed
 			var contact_offset: Vector3 = col.get_position() - collider.global_position
-			var impulse_mag: float = impact_speed * 1800.0 + 350.0
-			collider.apply_impulse(impulse_dir * impulse_mag * delta, contact_offset)
 
-			# If ramming at high speed, recoil/absorb kinetic energy on chassis
-			if impact_speed > 2.0:
+			if collider is ToteBox:
+				# Ramming / plowing lightweight physical tote boxes (12 kg)
+				var impulse_mag: float = impact_speed * 140.0 + 40.0
+				collider.apply_impulse(impulse_dir * impulse_mag * delta, contact_offset)
+			elif collider is ShelfPod:
+				# Off-center impact on heavy rack (280 kg) generates overturning torque
+				var impulse_mag: float = impact_speed * 2000.0 + 400.0
+				collider.apply_impulse(impulse_dir * impulse_mag * delta, contact_offset)
+				# If hit with solid momentum, spill boxes from the rack!
+				if impact_speed > 1.8:
+					collider.spill_all_totes()
+
+			# Chassis absorbs kinetic recoil if high speed impact
+			if impact_speed > 2.2:
 				_manual_linear_vel = move_toward(_manual_linear_vel, 0.0, 10.0 * delta)
 
 	# Safety boundary fallback clamp (walls will physically block first)
@@ -530,3 +539,36 @@ func get_telemetry_dict() -> Dictionary:
 		"carried_pod_id": carried_pod.pod_id if carried_pod else 0,
 		"vda_node": "NODE_(%.0f,%.0f)" % [global_position.x, global_position.z]
 	}
+
+func reset_robot(spawn_pos: Vector3, spawn_rot_y: float = 0.0) -> void:
+	global_position = spawn_pos
+	rotation = Vector3(0.0, spawn_rot_y, 0.0)
+	velocity = Vector3.ZERO
+	_manual_linear_vel = 0.0
+	current_speed = 0.0
+	_was_braking = false
+	_is_arm_tweening = false
+
+	# Reset arm motion state and joints to folded home pose
+	arm_motion_state = ArmMotionState.STATIONARY
+	has_gripped_box = false
+	stowed_box_count = 0
+	_current_box_material = null
+
+	if gripped_box:
+		gripped_box.visible = false
+	if tray_box:
+		tray_box.visible = false
+
+	if arm:
+		arm.rotation.y = 0.0
+	if shoulder:
+		shoulder.rotation.x = deg_to_rad(-25.0)
+	if elbow:
+		elbow.rotation.x = deg_to_rad(45.0)
+	if wrist:
+		wrist.rotation.x = deg_to_rad(-20.0)
+
+	set_amr_state(AmrState.IDLE)
+	_arm_status_text = "[WASD] Drive | [E] Prep Arm"
+	_update_dev_status_label()
