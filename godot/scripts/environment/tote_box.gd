@@ -2,8 +2,7 @@ class_name ToteBox
 extends RigidBody3D
 
 ## Dynamic Physical Tote Box for Autonomous Mobile Manipulator & Racking.
-## Supports full 3D physics: gravity, momentum transfer, falling/spilling,
-## and collision response with floor, AMRs, and other boxes.
+## Supports full 3D physics: gravity, momentum transfer, and collision response with floor, AMRs, and other boxes.
 
 @export var tier: int = 1
 @export var slot_side: String = "L"
@@ -23,11 +22,12 @@ var _material: Material = null
 
 func _ready() -> void:
 	add_to_group("tote_boxes")
-	_initial_transform = global_transform
-	# Docked by default: frozen in rack until spilled or grabbed
+	if _initial_transform == Transform3D():
+		_initial_transform = global_transform
+	# Docked by default: frozen in rack until rack topples or grabbed
 	freeze = true
 
-func dock_to_shelf(shelf: ShelfPod, p_tier: int, p_side: String, p_offset: Vector3, mat: Material, p_zone: String, p_cat: String) -> void:
+func dock_to_shelf(shelf: ShelfPod, p_tier: int, p_side: String, p_offset: Vector3, mat: Material, p_zone: String, p_cat: String, p_initial_world_pos: Vector3 = Vector3.ZERO) -> void:
 	home_shelf = shelf
 	tier = p_tier
 	slot_side = p_side
@@ -39,8 +39,13 @@ func dock_to_shelf(shelf: ShelfPod, p_tier: int, p_side: String, p_offset: Vecto
 	if mesh_inst and mat:
 		mesh_inst.material_override = mat
 
-	update_dock_transform()
-	_initial_transform = global_transform
+	if p_initial_world_pos != Vector3.ZERO:
+		_initial_transform = Transform3D(Basis.IDENTITY, p_initial_world_pos)
+		global_transform = _initial_transform
+	else:
+		update_dock_transform()
+		_initial_transform = global_transform
+
 	freeze = true
 	_is_spilled = false
 
@@ -55,21 +60,10 @@ func spill_from_rack() -> void:
 	_is_spilled = true
 	freeze = false
 
-	# Impart realistic tumble impulse: outward from rack center + upward wobble + rack velocity
+	# Naturally release with rack's physical momentum — NO artificial upward pop or explosive ejection
 	if home_shelf:
-		var outward: Vector3 = (global_position - home_shelf.global_position)
-		outward.y = 0.0
-		if outward.length_squared() > 0.01:
-			outward = outward.normalized()
-		else:
-			outward = Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0)).normalized()
-
-		linear_velocity = home_shelf.linear_velocity * 0.75 + outward * randf_range(1.6, 3.8) + Vector3.UP * randf_range(0.8, 2.0)
-		angular_velocity = Vector3(
-			randf_range(-5.0, 5.0),
-			randf_range(-3.0, 3.0),
-			randf_range(-5.0, 5.0)
-		)
+		linear_velocity = home_shelf.linear_velocity
+		angular_velocity = home_shelf.angular_velocity
 
 func reset_box() -> void:
 	_is_spilled = false

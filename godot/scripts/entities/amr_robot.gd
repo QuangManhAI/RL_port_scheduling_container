@@ -208,9 +208,6 @@ func _process_manual_driving(delta: float) -> void:
 				# Off-center impact on heavy rack (280 kg) generates overturning torque
 				var impulse_mag: float = impact_speed * 2000.0 + 400.0
 				collider.apply_impulse(impulse_dir * impulse_mag * delta, contact_offset)
-				# If hit with solid momentum, spill boxes from the rack!
-				if impact_speed > 1.8:
-					collider.spill_all_totes()
 
 			# Chassis absorbs kinetic recoil if high speed impact
 			if impact_speed > 2.2:

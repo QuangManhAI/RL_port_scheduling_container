@@ -11,8 +11,8 @@ extends RigidBody3D
 @export var is_lifted: bool = false
 @export var is_toppled: bool = false
 
-var _initial_pos: Vector3
-var _initial_basis: Basis
+var _initial_pos: Vector3 = Vector3.ZERO
+var _initial_basis: Basis = Basis.IDENTITY
 var _needs_reset: bool = false
 var _zone_color: Color = Color.WHITE
 
@@ -26,14 +26,15 @@ var _docked_boxes: Array[ToteBox] = []
 
 func _ready() -> void:
 	add_to_group("shelf_pods")
-	_initial_pos = global_position
-	_initial_basis = global_transform.basis
+	if _initial_pos == Vector3.ZERO:
+		_initial_pos = global_position
+		_initial_basis = global_transform.basis
 
 func _physics_process(_delta: float) -> void:
 	if not is_lifted and not is_toppled:
 		var up_alignment: float = global_transform.basis.y.dot(Vector3.UP)
-		# If tilted > 30 degrees (up_alignment < 0.86), rack is toppling!
-		if up_alignment < 0.86:
+		# Only topple and release boxes when rack has genuinely tipped past tipping point (tilted > 45 deg)
+		if up_alignment < 0.68:
 			is_toppled = true
 			spill_all_totes()
 			SoundManager.play_spatial(self, SoundManager.sfx_brake, 2.0, 0.65)
@@ -41,7 +42,7 @@ func _physics_process(_delta: float) -> void:
 				label_3d.text = "[%s]\n⚠️ RACK TOPPLED!\nSKU-%s-#%02d" % [zone_name, sku_category, pod_id]
 				label_3d.modulate = Color(1.0, 0.2, 0.2, 1.0)
 		else:
-			# Keep docked boxes aligned with rack frame
+			# Keep docked boxes aligned with rack frame during upright nudges
 			for box in _docked_boxes:
 				if is_instance_valid(box) and not box._is_spilled and box.freeze:
 					box.update_dock_transform()
@@ -79,11 +80,20 @@ func pick_tote(tier: int, check_pos: Vector3) -> Dictionary:
 
 	return {"found": false}
 
-func setup(p_id: int, p_zone: String = "Zone A", p_cat: String = "FMCG", zone_col: Color = Color(0.0, 0.8, 1.0)) -> void:
+func setup(p_id: int, p_zone: String = "Zone A", p_cat: String = "FMCG", zone_col: Color = Color(0.0, 0.8, 1.0), p_pos: Vector3 = Vector3.ZERO) -> void:
 	pod_id = p_id
 	zone_name = p_zone
 	sku_category = p_cat
 	_zone_color = zone_col
+
+	if p_pos != Vector3.ZERO:
+		_initial_pos = p_pos
+		_initial_basis = Basis.IDENTITY
+		global_position = p_pos
+		global_transform = Transform3D(Basis.IDENTITY, p_pos)
+	elif _initial_pos == Vector3.ZERO:
+		_initial_pos = global_position
+		_initial_basis = global_transform.basis
 
 	if label_3d:
 		label_3d.text = "[%s]\nSKU-%s-#%02d\n▼ T1 / T2 / T3 / T4 ▼" % [zone_name, sku_category, pod_id]
