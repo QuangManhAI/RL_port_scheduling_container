@@ -55,9 +55,11 @@ signal fullscreen_toggled
 @onready var btn_cam2: Button = $BottomBar/Controls/BtnCam2
 @onready var btn_cam3: Button = $BottomBar/Controls/BtnCam3
 @onready var btn_cam4: Button = $BottomBar/Controls/BtnCam4
+@onready var log_panel: Panel = $LogPanel
 @onready var log_box: RichTextLabel = $LogPanel/LogBox
 
 var is_auto_fleet: bool = false
+var _raw_log_lines: Array[String] = []
 
 func _ready() -> void:
 	if btn_inbound:
@@ -81,6 +83,11 @@ func _ready() -> void:
 		btn_cam3.pressed.connect(func(): camera_preset_requested.emit(3))
 	if btn_cam4:
 		btn_cam4.pressed.connect(func(): camera_preset_requested.emit(4))
+
+	if log_box:
+		log_box.gui_input.connect(_on_log_gui_input)
+	if log_panel:
+		log_panel.gui_input.connect(_on_log_gui_input)
 
 	log_event("[color=green]RAMemory Mission Control WES Digital Twin v2.2 Online.[/color]")
 	log_event("[color=cyan]Zoned Storage: Zone A (FMCG), Zone B (Tech), Zone C (Pharma), Zone D (Bulky).[/color]")
@@ -157,9 +164,32 @@ func update_ai_inspector(marl_decision: String, guardrail_status: String) -> voi
 		ai_guardrail_status.text = guardrail_status
 
 func log_event(msg: String) -> void:
+	var time_str: String = Time.get_time_string_from_system()
+	var clean_msg: String = _strip_bbcode(msg)
+	_raw_log_lines.append("[%s] %s" % [time_str, clean_msg])
 	if log_box:
-		var time_str: String = Time.get_time_string_from_system()
 		log_box.append_text("[color=gray][%s][/color] %s\n" % [time_str, msg])
+
+func _strip_bbcode(text: String) -> String:
+	var regex: RegEx = RegEx.new()
+	regex.compile("\\[[^\\]]*\\]")
+	return regex.sub(text, "", true)
+
+func _on_log_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mb: InputEventMouseButton = event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_LEFT and mb.double_click:
+			copy_logs_to_clipboard()
+
+func copy_logs_to_clipboard() -> void:
+	var full_text: String = ""
+	if log_box and not log_box.get_parsed_text().is_empty():
+		full_text = log_box.get_parsed_text()
+	else:
+		full_text = "\n".join(_raw_log_lines)
+
+	DisplayServer.clipboard_set(full_text)
+	log_event("[color=lime]📋 Logs copied to clipboard (%d entries)![/color]" % _raw_log_lines.size())
 
 func _on_auto_pressed() -> void:
 	is_auto_fleet = not is_auto_fleet

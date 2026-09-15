@@ -325,26 +325,26 @@ func toggle_fullscreen() -> void:
 		return
 	_last_fullscreen_toggle_time = now
 
-	var cur_mode: DisplayServer.WindowMode = DisplayServer.window_get_mode()
-	var is_fullscreen_now: bool = (cur_mode == DisplayServer.WINDOW_MODE_FULLSCREEN or cur_mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN)
+	var win: Window = get_window()
+	var is_fullscreen_now: bool = (win.mode == Window.MODE_FULLSCREEN or win.mode == Window.MODE_EXCLUSIVE_FULLSCREEN)
 
 	if is_fullscreen_now:
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		win.mode = Window.MODE_WINDOWED
 		var screen_size: Vector2i = DisplayServer.screen_get_size()
 		var target_w: int = int(min(1600, screen_size.x * 0.85))
 		var target_h: int = int(min(900, screen_size.y * 0.85))
-		DisplayServer.window_set_size(Vector2i(target_w, target_h))
-		DisplayServer.window_set_position(Vector2i(
+		win.size = Vector2i(target_w, target_h)
+		win.position = Vector2i(
 			max(0, (screen_size.x - target_w) / 2),
 			max(0, (screen_size.y - target_h) / 2)
-		))
+		)
 		if hud and hud.btn_fullscreen:
 			hud.btn_fullscreen.text = "⛶ Full [F11]"
 		if hud:
 			hud.log_event("[color=yellow]Window display switched to Windowed (%dx%d).[/color]" % [target_w, target_h])
 	else:
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		win.mode = Window.MODE_FULLSCREEN
 		if hud and hud.btn_fullscreen:
 			hud.btn_fullscreen.text = "🗗 Window [F11]"
 		if hud:
-			hud.log_event("[color=cyan]Window display switched to Fullscreen (Press F11 or Alt+Enter to exit).[/color]")
+			hud.log_event("[color=cyan]Window display switched to Fullscreen (Press F11 to exit).[/color]")
