@@ -539,28 +539,40 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_card")
 text = "📍 Pick Stn"
 
 [node name="BtnCam1" type="Button" parent="BottomBar/Controls"]
-custom_minimum_size = Vector2(80, 36)
+custom_minimum_size = Vector2(85, 36)
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_card")
-text = "📷 [1] Iso"
+text = "📷 [1] Cutaway"
 
 [node name="BtnCam2" type="Button" parent="BottomBar/Controls"]
+custom_minimum_size = Vector2(85, 36)
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_card")
+text = "📷 [2] Mezzanine"
+
+[node name="BtnCam3" type="Button" parent="BottomBar/Controls"]
+custom_minimum_size = Vector2(75, 36)
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_card")
+text = "📷 [3] 2D"
+
+[node name="BtnCam4" type="Button" parent="BottomBar/Controls"]
 custom_minimum_size = Vector2(80, 36)
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_card")
-text = "📷 [2] 2D"
+text = "📷 [4] Pick"
 
-[node name="BtnCam3" type="Button" parent="BottomBar/Controls"]
-custom_minimum_size = Vector2(85, 36)
+[node name="BtnCam5" type="Button" parent="BottomBar/Controls"]
+custom_minimum_size = Vector2(80, 36)
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_card")
-text = "📷 [3] Pick"
+text = "📷 [5] Dock"
 
-[node name="BtnCam4" type="Button" parent="BottomBar/Controls"]
-custom_minimum_size = Vector2(85, 36)
+[node name="BtnCutaway" type="Button" parent="BottomBar/Controls"]
+custom_minimum_size = Vector2(95, 36)
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_card")
-text = "📷 [4] Inbound"
+text = "✂ Cutaway [T]"
 
 [node name="BtnReset" type="Button" parent="BottomBar/Controls"]
 custom_minimum_size = Vector2(75, 36)

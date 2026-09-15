@@ -3,6 +3,8 @@ extends CharacterBody3D
 
 ## Autonomous Mobile Robot (AMR) designed for smart warehouse Goods-to-Person logistics.
 ## Features elevating turntable, multi-color state LED ring, rotating LiDAR, and VDA 5050 state reporting.
+## Equipped with 4-DOF Articulated Robotic Arm with analytical 3D IK, parallel two-finger clamping gripper,
+## and dual-slot physical cargo tray with retention guardrails and Area3D payload presence sensors.
 
 enum AmrState {
 	IDLE = 0,
@@ -11,6 +13,18 @@ enum AmrState {
 	BLOCKED_SAFETY = 3,
 	LIFTING = 4,
 	CHARGING = 5
+}
+
+enum ArmMotionState {
+	STATIONARY,
+	TARGETING,
+	PRE_GRASP,
+	INSERTING,
+	CLAMPING,
+	RETRACTING,
+	HELD_READY,
+	STOWING,
+	PLACING
 }
 
 const COLOR_MOVING: Color = Color(0.0, 0.95, 1.0)      # Cyan (Cruising)
@@ -32,37 +46,46 @@ const COLOR_CHARGING: Color = Color(0.1, 0.9, 0.4)     # Emerald (Charging)
 @onready var shoulder: Node3D = $RoboticArm/ShoulderJoint
 @onready var elbow: Node3D = $RoboticArm/ShoulderJoint/ElbowJoint
 @onready var wrist: Node3D = $RoboticArm/ShoulderJoint/ElbowJoint/WristJoint
-@onready var gripped_box: MeshInstance3D = $RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/GrippedBox
+@onready var finger_left: Node3D = $RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/FingerLeft
+@onready var finger_right: Node3D = $RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/FingerRight
+@onready var gripped_socket: Node3D = $RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/GrippedBoxSocket
+
 @onready var cargo_tray: Node3D = $Chassis/CargoTray
-@onready var tray_box: MeshInstance3D = $Chassis/CargoTray/TrayBox1
+@onready var slot_1_marker: Marker3D = $Chassis/CargoTray/Slot1Marker
+@onready var slot_2_marker: Marker3D = $Chassis/CargoTray/Slot2Marker
+@onready var slot_1_sensor: Area3D = $Chassis/CargoTray/Slot1Sensor
+@onready var slot_2_sensor: Area3D = $Chassis/CargoTray/Slot2Sensor
+
 @onready var side_strip_left: MeshInstance3D = $Chassis/SideLedStripLeft
 @onready var side_strip_right: MeshInstance3D = $Chassis/SideLedStripRight
-enum ArmMotionState {
-	STATIONARY,
-	PREPARING,
-	AIMING_TIER,
-	PICKING,
-	GRIPPED,
-	STOWING
-}
-
+@onready var target_reticle: Node3D = $TargetReticle
+@onready var reticle_ring: MeshInstance3D = $TargetReticle/ReticleRing
 @onready var label_status: Label3D = $StatusBadge
+
+# Compact Folded Rest Pose Constants
+const REST_ARM_YAW: float = 0.0
+const REST_SHOULDER_PITCH: float = -1.18682  # deg_to_rad(-68.0): folded forward-down along chassis
+const REST_ELBOW_PITCH: float = 2.44346      # deg_to_rad(140.0): folded tightly back above boom
+const REST_WRIST_PITCH: float = -1.25664     # deg_to_rad(-72.0): gripper level and tucked
+const REST_FINGER_SPAN: float = 0.16         # Neatly closed parking width
 
 var current_state: AmrState = AmrState.IDLE
 var arm_motion_state: ArmMotionState = ArmMotionState.STATIONARY
 var carried_pod: ShelfPod = null
 var current_speed: float = 0.0
 var _manual_linear_vel: float = 0.0
+var _prev_linear_vel: float = 0.0
+var _chassis_accel: float = 0.0
+var _arm_idle_time: float = 0.0
+var _drive_vib_time: float = 0.0
 var _led_material: StandardMaterial3D
+var _reticle_material: StandardMaterial3D
 
-var has_gripped_box: bool = false
-var selected_tier: int = 1
-var arm_reach_side: float = 1.0
-var stowed_box_count: int = 0
-var _current_box_material: Material = null
+var active_target_box: ToteBox = null
+var held_box: ToteBox = null
 var _is_arm_tweening: bool = false
 var _was_braking: bool = false
-var _arm_status_text: String = "[WASD] Drive | [E] Prep Arm"
+var _arm_status_text: String = "[WASD] Drive | Click/E: Target Box"
 
 func _ready() -> void:
 	_led_material = StandardMaterial3D.new()
@@ -73,57 +96,478 @@ func _ready() -> void:
 	if side_strip_right:
 		side_strip_right.set_surface_override_material(0, _led_material)
 
-	if gripped_box:
-		gripped_box.visible = false
-	if tray_box:
-		tray_box.visible = false
+	_reticle_material = StandardMaterial3D.new()
+	_reticle_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_reticle_material.albedo_color = Color(0.0, 0.9, 1.0, 0.9)
+	if reticle_ring:
+		reticle_ring.set_surface_override_material(0, _reticle_material)
 
-	# Initial home fold (stationary resting pose)
-	if arm: arm.rotation.y = 0.0
-	if shoulder: shoulder.rotation.x = deg_to_rad(-25.0)
-	if elbow: elbow.rotation.x = deg_to_rad(45.0)
-	if wrist: wrist.rotation.x = deg_to_rad(-20.0)
+	if target_reticle:
+		target_reticle.visible = false
+
+	# Initial folded resting pose
+	_fold_arm_to_home_instant()
 
 	set_amr_state(AmrState.IDLE)
 	_update_dev_status_label()
 
-func _unhandled_input(event: InputEvent) -> void:
-	if not is_manual_control or _is_arm_tweening:
+func _process(_delta: float) -> void:
+	if is_manual_control:
+		_update_targeting_reticle()
+
+## Physical Sensor Queries for Payload Presence in Cargo Tray
+func is_slot_occupied(slot_idx: int) -> bool:
+	var sensor: Area3D = slot_1_sensor if slot_idx == 0 else slot_2_sensor
+	if not sensor:
+		return false
+	for body in sensor.get_overlapping_bodies():
+		if body is ToteBox and is_instance_valid(body) and body != held_box and body.visible:
+			return true
+	return false
+
+func get_slot_box(slot_idx: int) -> ToteBox:
+	var sensor: Area3D = slot_1_sensor if slot_idx == 0 else slot_2_sensor
+	if not sensor:
+		return null
+	for body in sensor.get_overlapping_bodies():
+		if body is ToteBox and is_instance_valid(body) and body != held_box and body.visible:
+			return body
+	return null
+
+func get_stowed_box_count() -> int:
+	var count: int = 0
+	if is_slot_occupied(0): count += 1
+	if is_slot_occupied(1): count += 1
+	return count
+
+func get_first_empty_slot() -> int:
+	if not is_slot_occupied(0):
+		return 0
+	if not is_slot_occupied(1):
+		return 1
+	return -1
+
+func _update_targeting_reticle() -> void:
+	if not target_reticle:
 		return
 
+	if active_target_box == null or not is_instance_valid(active_target_box) or not active_target_box.visible:
+		target_reticle.visible = false
+		return
+
+	target_reticle.visible = true
+	target_reticle.global_position = active_target_box.global_position + Vector3(0.0, 0.02, 0.0)
+
+	# Calculate distance strictly from the arm's shoulder pivot joint
+	var dist_to_shoulder: float = shoulder.global_position.distance_to(active_target_box.global_position)
+	var local_target: Vector3 = arm.to_local(active_target_box.global_position)
+	var ik: ArmIKSolver.IKResult = ArmIKSolver.solve_local(local_target)
+
+	if ik.success:
+		if _reticle_material:
+			_reticle_material.albedo_color = Color(0.0, 0.95, 1.0, 0.95)
+		if arm_motion_state in [ArmMotionState.STATIONARY, ArmMotionState.TARGETING]:
+			_arm_status_text = "🎯 Ready (%.2fm to arm) | [E] Pick | [Esc] Cancel" % dist_to_shoulder
+	else:
+		if _reticle_material:
+			_reticle_material.albedo_color = Color(1.0, 0.2, 0.2, 0.95)
+		if arm_motion_state in [ArmMotionState.STATIONARY, ArmMotionState.TARGETING]:
+			_arm_status_text = "⚠️ Out of Reach (%.1fm > 2.15m) | [Esc] Cancel" % dist_to_shoulder
+
+	_update_dev_status_label()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not is_manual_control:
+		return
+
+	# 1. 3D Viewport Mouse Click on ToteBox
+	if event is InputEventMouseButton and event.pressed and not event.is_echo():
+		var mb: InputEventMouseButton = event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_LEFT and not _is_arm_tweening:
+			_handle_mouse_pick_raycast()
+
+	# 2. Keyboard Control Keys
 	if event is InputEventKey and event.pressed and not event.echo:
 		var key: InputEventKey = event as InputEventKey
 
-		# [E] Key: State Machine Driver
-		if key.keycode == KEY_E:
+		if key.keycode == KEY_ESCAPE and not _is_arm_tweening:
+			cancel_arm_to_stationary()
+			get_viewport().set_input_as_handled()
+
+		elif key.keycode == KEY_E and not _is_arm_tweening:
 			match arm_motion_state:
-				ArmMotionState.STATIONARY:
-					prepare_arm_for_pickup()
+				ArmMotionState.STATIONARY, ArmMotionState.TARGETING:
+					_handle_pick_command()
 					get_viewport().set_input_as_handled()
-				ArmMotionState.PREPARING, ArmMotionState.AIMING_TIER:
-					return_arm_to_stationary()
-					get_viewport().set_input_as_handled()
-				ArmMotionState.GRIPPED:
-					stow_box_to_tray()
+				ArmMotionState.HELD_READY:
+					execute_dynamic_stow()
 					get_viewport().set_input_as_handled()
 
-		# [1, 2, 3, 4] Keys: Select Rack Tier
-		elif key.keycode in [KEY_1, KEY_2, KEY_3, KEY_4]:
-			if arm_motion_state == ArmMotionState.PREPARING or arm_motion_state == ArmMotionState.AIMING_TIER:
-				var tier: int = 1
-				match key.keycode:
-					KEY_1: tier = 1
-					KEY_2: tier = 2
-					KEY_3: tier = 3
-					KEY_4: tier = 4
-				aim_arm_at_tier(tier)
+		elif key.keycode == KEY_G and not _is_arm_tweening:
+			if arm_motion_state == ArmMotionState.HELD_READY:
+				execute_dynamic_place()
 				get_viewport().set_input_as_handled()
 
-		# [F] Key: Pick up Box
-		elif key.keycode == KEY_F:
-			if arm_motion_state == ArmMotionState.AIMING_TIER or arm_motion_state == ArmMotionState.PREPARING:
-				execute_pick_attempt()
-				get_viewport().set_input_as_handled()
+func cancel_arm_to_stationary() -> void:
+	active_target_box = null
+	if target_reticle:
+		target_reticle.visible = false
+
+	if held_box == null:
+		SoundManager.play_spatial(self, SoundManager.sfx_cancel, -2.0)
+		_is_arm_tweening = true
+		var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tween.tween_property(arm, "rotation:y", REST_ARM_YAW, 0.35)
+		tween.parallel().tween_property(shoulder, "rotation:x", REST_SHOULDER_PITCH, 0.35)
+		tween.parallel().tween_property(elbow, "rotation:x", REST_ELBOW_PITCH, 0.35)
+		tween.parallel().tween_property(wrist, "rotation:x", REST_WRIST_PITCH, 0.35)
+		if finger_left: tween.parallel().tween_property(finger_left, "position:x", -REST_FINGER_SPAN, 0.30)
+		if finger_right: tween.parallel().tween_property(finger_right, "position:x", REST_FINGER_SPAN, 0.30)
+		tween.finished.connect(func():
+			_is_arm_tweening = false
+			arm_motion_state = ArmMotionState.STATIONARY
+			set_amr_state(AmrState.IDLE)
+			_arm_status_text = "[WASD] Drive | Click/E: Target Box"
+			_update_dev_status_label()
+		)
+	else:
+		_arm_status_text = "📦 Box Gripped! [E] Stow in Tray | [G] Place on Floor"
+		_update_dev_status_label()
+
+func _handle_mouse_pick_raycast() -> void:
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if not cam:
+		return
+
+	var mouse_pos: Vector2 = get_viewport().get_mouse_position()
+	var ray_origin: Vector3 = cam.project_ray_origin(mouse_pos)
+	var ray_normal: Vector3 = cam.project_ray_normal(mouse_pos)
+	var ray_length: float = 250.0
+
+	var query := PhysicsRayQueryParameters3D.create(ray_origin, ray_origin + ray_normal * ray_length)
+	query.collision_mask = 8 # Layer 4 = ToteBox (collision_layer 8)
+	query.collide_with_bodies = true
+
+	var space_state := get_world_3d().direct_space_state
+	var result := space_state.intersect_ray(query)
+
+	if result and result.has("collider"):
+		var collider = result["collider"]
+		if collider is ToteBox and is_instance_valid(collider) and collider.visible and collider.get_parent() != cargo_tray:
+			select_target_box(collider)
+			SoundManager.play_spatial(self, SoundManager.sfx_click, -1.0)
+
+func select_target_box(box: ToteBox) -> void:
+	active_target_box = box
+	arm_motion_state = ArmMotionState.TARGETING
+	_update_targeting_reticle()
+
+func _find_nearest_tote_box() -> ToteBox:
+	var nodes = get_tree().get_nodes_in_group("tote_boxes")
+	var nearest: ToteBox = null
+	var min_dist: float = 4.5
+	for node in nodes:
+		if node is ToteBox and is_instance_valid(node) and node.visible and node != held_box and node.get_parent() != cargo_tray:
+			# Distance strictly from shoulder pivot
+			var d: float = shoulder.global_position.distance_to(node.global_position)
+			if d < min_dist:
+				min_dist = d
+				nearest = node
+	return nearest
+
+func _handle_pick_command() -> void:
+	if active_target_box == null or not is_instance_valid(active_target_box):
+		var nearest: ToteBox = _find_nearest_tote_box()
+		if nearest:
+			select_target_box(nearest)
+		else:
+			_arm_status_text = "⚠️ No ToteBox in range. Drive closer or click one."
+			SoundManager.play_spatial(self, SoundManager.sfx_cancel, -3.0)
+			_update_dev_status_label()
+			return
+
+	var local_target: Vector3 = arm.to_local(active_target_box.global_position)
+	var ik: ArmIKSolver.IKResult = ArmIKSolver.solve_local(local_target)
+
+	if ik.success:
+		execute_dynamic_pick(active_target_box)
+	else:
+		SoundManager.play_spatial(self, SoundManager.sfx_cancel, -2.0)
+		_arm_status_text = "⚠️ Out of Reach (%.1fm > 2.15m) — Drive Closer" % ik.target_distance
+		_update_dev_status_label()
+
+func _get_world_root() -> Node:
+	if get_tree().current_scene:
+		return get_tree().current_scene
+	var totes = get_tree().get_nodes_in_group("tote_boxes")
+	if totes.size() > 0 and is_instance_valid(totes[0]):
+		return totes[0].get_parent()
+	return get_parent()
+
+func execute_dynamic_pick(target_box: ToteBox) -> void:
+	if _is_arm_tweening or not is_instance_valid(target_box):
+		return
+	_is_arm_tweening = true
+	arm_motion_state = ArmMotionState.PRE_GRASP
+	set_amr_state(AmrState.LIFTING)
+	SoundManager.play_spatial(self, SoundManager.sfx_arm_prepare, -1.0)
+
+	var box_pos: Vector3 = target_box.global_position
+	var is_on_shelf: bool = box_pos.y > 0.45
+
+	# 1. Calculate staging and grasp waypoints
+	var staging_pos: Vector3
+	if is_on_shelf:
+		var dir_to_amr: Vector3 = (global_position - box_pos)
+		dir_to_amr.y = 0.0
+		if dir_to_amr.length_squared() > 0.01:
+			dir_to_amr = dir_to_amr.normalized()
+		else:
+			dir_to_amr = -global_transform.basis.z
+		var local_dist: float = arm.to_local(box_pos).length()
+		var pullback: float = clampf(local_dist - 0.32, 0.10, 0.25)
+		staging_pos = box_pos + dir_to_amr * pullback
+	else:
+		staging_pos = box_pos + Vector3(0.0, 0.22, 0.0)
+
+	var ik_grasp = ArmIKSolver.solve_local(arm.to_local(box_pos))
+	if not ik_grasp.success:
+		_is_arm_tweening = false
+		arm_motion_state = ArmMotionState.STATIONARY
+		set_amr_state(AmrState.IDLE)
+		SoundManager.play_spatial(self, SoundManager.sfx_cancel, -2.0)
+		_arm_status_text = "⚠️ Kinematic Envelope Exception: Re-align AMR"
+		_update_dev_status_label()
+		return
+
+	var ik_staging = ArmIKSolver.solve_local(arm.to_local(staging_pos))
+	if not ik_staging.success:
+		# Fallback: elevate staging slightly above grasp pose
+		staging_pos = box_pos + Vector3(0.0, 0.12, 0.0)
+		ik_staging = ArmIKSolver.solve_local(arm.to_local(staging_pos))
+		if not ik_staging.success:
+			ik_staging = ik_grasp
+
+	_arm_status_text = "Stage 1: Pre-Grasp Staging outside bay..."
+	_update_dev_status_label()
+
+	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+	# --- STAGE 1: Pre-Grasp Staging & Gripper Opening ---
+	tween.tween_property(arm, "rotation:y", ik_staging.base_yaw, 0.45)
+	tween.parallel().tween_property(shoulder, "rotation:x", ik_staging.shoulder_pitch, 0.45)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_staging.elbow_pitch, 0.45)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_staging.wrist_pitch, 0.45)
+	if finger_left: tween.parallel().tween_property(finger_left, "position:x", -0.34, 0.35)
+	if finger_right: tween.parallel().tween_property(finger_right, "position:x", 0.34, 0.35)
+
+	# --- STAGE 2: Linear Horizontal Insertion into Bay ---
+	tween.tween_callback(func():
+		arm_motion_state = ArmMotionState.INSERTING
+		_arm_status_text = "Stage 2: Linear Insertion into bay..."
+		_update_dev_status_label()
+	)
+	tween.tween_property(shoulder, "rotation:x", ik_grasp.shoulder_pitch, 0.35)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_grasp.elbow_pitch, 0.35)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_grasp.wrist_pitch, 0.35)
+
+	# --- STAGE 3: Bilateral Clamping onto Box ---
+	tween.tween_callback(func():
+		arm_motion_state = ArmMotionState.CLAMPING
+		_arm_status_text = "Stage 3: Clamping mechanical fingers..."
+		_update_dev_status_label()
+	)
+	if finger_left: tween.tween_property(finger_left, "position:x", -0.29, 0.22)
+	if finger_right: tween.parallel().tween_property(finger_right, "position:x", 0.29, 0.22)
+
+	# Grip lock assist: Socket the rigid body to end-effector
+	tween.tween_callback(func():
+		if is_instance_valid(target_box):
+			held_box = target_box
+			held_box.freeze = true
+			held_box.linear_velocity = Vector3.ZERO
+			held_box.angular_velocity = Vector3.ZERO
+
+			# Reparent to socket to guarantee zero transit drift
+			held_box.get_parent().remove_child(held_box)
+			gripped_socket.add_child(held_box)
+			held_box.transform = Transform3D.IDENTITY
+
+			SoundManager.play_spatial(self, SoundManager.sfx_box_pick, +2.0)
+	)
+
+	# --- STAGE 4: Linear Retraction with Box ---
+	tween.tween_interval(0.08)
+	tween.tween_callback(func():
+		arm_motion_state = ArmMotionState.RETRACTING
+		_arm_status_text = "Stage 4: Retracting into aisle..."
+		_update_dev_status_label()
+	)
+	tween.tween_property(shoulder, "rotation:x", ik_staging.shoulder_pitch, 0.38)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_staging.elbow_pitch, 0.38)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_staging.wrist_pitch, 0.38)
+
+	# --- STAGE 5: Held Ready in Aisle ---
+	tween.finished.connect(func():
+		_is_arm_tweening = false
+		arm_motion_state = ArmMotionState.HELD_READY
+		active_target_box = null
+		if target_reticle:
+			target_reticle.visible = false
+		set_amr_state(AmrState.IDLE)
+		_arm_status_text = "📦 Box Gripped! [E] Stow in Tray | [G] Place | [Esc] Reset"
+		_update_dev_status_label()
+	)
+
+func execute_dynamic_stow() -> void:
+	if _is_arm_tweening or held_box == null:
+		return
+
+	# Query physical Area3D sensors for first available slot
+	var target_slot_idx: int = get_first_empty_slot()
+	if target_slot_idx == -1:
+		SoundManager.play_spatial(self, SoundManager.sfx_cancel, -2.0)
+		_arm_status_text = "⚠️ Cargo Tray Full (2/2) — Press [G] to Place"
+		_update_dev_status_label()
+		return
+
+	_is_arm_tweening = true
+	arm_motion_state = ArmMotionState.STOWING
+	set_amr_state(AmrState.LIFTING)
+
+	var slot_marker: Marker3D = slot_1_marker if target_slot_idx == 0 else slot_2_marker
+	var slot_world: Vector3 = slot_marker.global_position
+	var slot_staging_world: Vector3 = slot_world + Vector3(0.0, 0.28, 0.0)
+
+	var ik_staging = ArmIKSolver.solve_local(arm.to_local(slot_staging_world))
+	var ik_place = ArmIKSolver.solve_local(arm.to_local(slot_world))
+
+	_arm_status_text = "Stowing into Tray Slot %d..." % (target_slot_idx + 1)
+	_update_dev_status_label()
+
+	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+
+	# 1. Swivel 180 degrees backwards over active slot
+	tween.tween_property(arm, "rotation:y", ik_staging.base_yaw, 0.45)
+	tween.parallel().tween_property(shoulder, "rotation:x", ik_staging.shoulder_pitch, 0.45)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_staging.elbow_pitch, 0.45)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_staging.wrist_pitch, 0.45)
+
+	# 2. Lower into slot bed (box bottom sits flush on tray floor)
+	tween.tween_property(shoulder, "rotation:x", ik_place.shoulder_pitch, 0.28)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_place.elbow_pitch, 0.28)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_place.wrist_pitch, 0.28)
+
+	# 3. Open fingers and release payload cleanly into tray bed
+	if finger_left: tween.tween_property(finger_left, "position:x", -0.34, 0.18)
+	if finger_right: tween.parallel().tween_property(finger_right, "position:x", 0.34, 0.18)
+
+	tween.tween_callback(func():
+		if is_instance_valid(held_box):
+			# Parent to cargo_tray so it moves with the vehicle with 0% floating or jitter
+			held_box.get_parent().remove_child(held_box)
+			cargo_tray.add_child(held_box)
+			held_box.position = slot_marker.position
+			held_box.rotation = Vector3.ZERO
+			held_box.freeze = true
+			held_box.sleeping = false
+			held_box = null
+
+			SoundManager.play_spatial(self, SoundManager.sfx_box_stow, +1.0)
+	)
+
+	# 4. Retract and fold arm back to compact rest pose
+	tween.tween_interval(0.10)
+	tween.tween_property(arm, "rotation:y", REST_ARM_YAW, 0.38)
+	tween.parallel().tween_property(shoulder, "rotation:x", REST_SHOULDER_PITCH, 0.38)
+	tween.parallel().tween_property(elbow, "rotation:x", REST_ELBOW_PITCH, 0.38)
+	tween.parallel().tween_property(wrist, "rotation:x", REST_WRIST_PITCH, 0.38)
+	if finger_left: tween.parallel().tween_property(finger_left, "position:x", -REST_FINGER_SPAN, 0.30)
+	if finger_right: tween.parallel().tween_property(finger_right, "position:x", REST_FINGER_SPAN, 0.30)
+
+	tween.finished.connect(func():
+		_is_arm_tweening = false
+		arm_motion_state = ArmMotionState.STATIONARY
+		set_amr_state(AmrState.IDLE)
+		_arm_status_text = "📦 Box Stowed (%d/2)! [WASD] Drive | Click/E: Pick" % get_stowed_box_count()
+		_update_dev_status_label()
+	)
+
+func execute_dynamic_place() -> void:
+	if _is_arm_tweening or held_box == null:
+		return
+	_is_arm_tweening = true
+	arm_motion_state = ArmMotionState.PLACING
+	set_amr_state(AmrState.LIFTING)
+
+	# Place directly onto floor in front of chassis
+	var forward_dir: Vector3 = -global_transform.basis.z
+	var place_floor_world: Vector3 = global_position + forward_dir * 0.95 + Vector3(0.0, 0.16, 0.0)
+	var staging_world: Vector3 = place_floor_world + Vector3(0.0, 0.25, 0.0)
+
+	var ik_staging = ArmIKSolver.solve_local(arm.to_local(staging_world))
+	var ik_place = ArmIKSolver.solve_local(arm.to_local(place_floor_world))
+
+	_arm_status_text = "Placing box onto floor..."
+	_update_dev_status_label()
+
+	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+	# 1. Move to staging above floor spot
+	tween.tween_property(arm, "rotation:y", ik_staging.base_yaw, 0.35)
+	tween.parallel().tween_property(shoulder, "rotation:x", ik_staging.shoulder_pitch, 0.35)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_staging.elbow_pitch, 0.35)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_staging.wrist_pitch, 0.35)
+
+	# 2. Lower to floor
+	tween.tween_property(shoulder, "rotation:x", ik_place.shoulder_pitch, 0.25)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_place.elbow_pitch, 0.25)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_place.wrist_pitch, 0.25)
+
+	# 3. Open fingers & release
+	if finger_left: tween.tween_property(finger_left, "position:x", -0.34, 0.18)
+	if finger_right: tween.parallel().tween_property(finger_right, "position:x", 0.34, 0.18)
+
+	tween.tween_callback(func():
+		if is_instance_valid(held_box):
+			var final_world_tform: Transform3D = held_box.global_transform
+			held_box.get_parent().remove_child(held_box)
+			_get_world_root().add_child(held_box)
+			held_box.global_transform = final_world_tform
+			held_box.freeze = false
+			held_box.sleeping = false
+			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_SLEEPING, false)
+			held_box.linear_velocity = Vector3(0.0, -0.35, 0.0)
+			held_box.angular_velocity = Vector3.ZERO
+			held_box = null
+
+			SoundManager.play_spatial(self, SoundManager.sfx_box_stow, 0.0)
+	)
+
+	# 4. Fold home to compact rest pose
+	tween.tween_interval(0.10)
+	tween.tween_property(arm, "rotation:y", REST_ARM_YAW, 0.35)
+	tween.parallel().tween_property(shoulder, "rotation:x", REST_SHOULDER_PITCH, 0.35)
+	tween.parallel().tween_property(elbow, "rotation:x", REST_ELBOW_PITCH, 0.35)
+	tween.parallel().tween_property(wrist, "rotation:x", REST_WRIST_PITCH, 0.35)
+	if finger_left: tween.parallel().tween_property(finger_left, "position:x", -REST_FINGER_SPAN, 0.30)
+	if finger_right: tween.parallel().tween_property(finger_right, "position:x", REST_FINGER_SPAN, 0.30)
+
+	tween.finished.connect(func():
+		_is_arm_tweening = false
+		arm_motion_state = ArmMotionState.STATIONARY
+		set_amr_state(AmrState.IDLE)
+		_arm_status_text = "Box Placed! [WASD] Drive | Click/E: Pick"
+		_update_dev_status_label()
+	)
+
+func _fold_arm_to_home_instant() -> void:
+	if arm: arm.rotation.y = REST_ARM_YAW
+	if shoulder: shoulder.rotation.x = REST_SHOULDER_PITCH
+	if elbow: elbow.rotation.x = REST_ELBOW_PITCH
+	if wrist: wrist.rotation.x = REST_WRIST_PITCH
+	if finger_left: finger_left.position.x = -REST_FINGER_SPAN
+	if finger_right: finger_right.position.x = REST_FINGER_SPAN
 
 func _physics_process(delta: float) -> void:
 	if is_manual_control:
@@ -133,20 +577,75 @@ func _physics_process(delta: float) -> void:
 			velocity.y -= 9.81 * delta
 			move_and_slide()
 
+	_update_inactive_arm_animation(delta)
+	_update_stowed_cargo_dynamics(delta)
+
+## Dynamic Idle Breathing and Suspension Compliance for Inactive Resting Arm
+func _update_inactive_arm_animation(delta: float) -> void:
+	if arm_motion_state != ArmMotionState.STATIONARY or _is_arm_tweening:
+		return
+
+	_arm_idle_time += delta
+	# Gentle mechanical breathing oscillation (0.24 Hz)
+	var idle_sway: float = sin(_arm_idle_time * 1.5) * deg_to_rad(0.55)
+	# Subtle inertial pitch reacting to chassis acceleration/braking
+	var inertial_pitch: float = clampf(-_chassis_accel * 0.002, -deg_to_rad(1.8), deg_to_rad(1.8))
+
+	if shoulder:
+		shoulder.rotation.x = move_toward(shoulder.rotation.x, REST_SHOULDER_PITCH + idle_sway + inertial_pitch, 1.2 * delta)
+	if elbow:
+		elbow.rotation.x = move_toward(elbow.rotation.x, REST_ELBOW_PITCH - idle_sway * 0.5, 1.2 * delta)
+	if wrist:
+		wrist.rotation.x = move_toward(wrist.rotation.x, REST_WRIST_PITCH, 1.2 * delta)
+	if arm:
+		arm.rotation.y = move_toward(arm.rotation.y, REST_ARM_YAW, 2.0 * delta)
+	if finger_left:
+		finger_left.position.x = move_toward(finger_left.position.x, -REST_FINGER_SPAN, 0.8 * delta)
+	if finger_right:
+		finger_right.position.x = move_toward(finger_right.position.x, REST_FINGER_SPAN, 0.8 * delta)
+
+## Natural Physical Micro-Inertia & Compliance for Stowed Cargo in Tray
+func _update_stowed_cargo_dynamics(delta: float) -> void:
+	_chassis_accel = (_manual_linear_vel - _prev_linear_vel) / maxf(delta, 0.001)
+	_prev_linear_vel = _manual_linear_vel
+
+	if abs(_manual_linear_vel) > 0.05:
+		_drive_vib_time += delta * (14.0 + abs(_manual_linear_vel) * 2.0)
+	else:
+		_drive_vib_time = 0.0
+
+	# Road/floor travel micro-vibration
+	var vib_y: float = sin(_drive_vib_time) * 0.0012 * clampf(abs(_manual_linear_vel) / max_speed, 0.0, 1.0)
+	# Inertial forward/backward shift inside the tray bed (-1.8cm to +1.8cm)
+	var inertial_z: float = clampf(-_chassis_accel * 0.0014, -0.018, 0.018)
+	# Subtle pitch compliance on acceleration and braking
+	var inertial_pitch: float = clampf(-_chassis_accel * 0.0035, -deg_to_rad(2.0), deg_to_rad(2.0))
+	# Subtle roll compliance on turns
+	var turn_rate: float = Input.get_axis("ui_right", "ui_left") if is_manual_control else 0.0
+	var roll_angle: float = clampf(turn_rate * deg_to_rad(1.4), -deg_to_rad(1.4), deg_to_rad(1.4))
+
+	for slot_idx in [0, 1]:
+		var marker: Marker3D = slot_1_marker if slot_idx == 0 else slot_2_marker
+		if not marker: continue
+		var box: ToteBox = get_slot_box(slot_idx)
+		if box and is_instance_valid(box) and box.get_parent() == cargo_tray:
+			var target_pos: Vector3 = marker.position + Vector3(0.0, vib_y, inertial_z)
+			var target_rot: Vector3 = Vector3(inertial_pitch, 0.0, roll_angle)
+			box.position = box.position.lerp(target_pos, 10.0 * delta)
+			box.rotation = box.rotation.lerp(target_rot, 10.0 * delta)
+
 func _process_manual_driving(delta: float) -> void:
 	var move_input: float = 0.0
 	var turn_input: float = 0.0
 	var is_braking: bool = Input.is_key_pressed(KEY_SPACE)
 
-	# Only allow driving when arm is not extending/stowing
+	# Only allow driving when arm is not in picking or stowing sequence
 	if not _is_arm_tweening:
-		# Forward / Reverse
 		if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
 			move_input += 1.0
 		if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
 			move_input -= 0.65
 
-		# Left / Right Rotation
 		if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
 			turn_input += 1.0
 		if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
@@ -173,7 +672,7 @@ func _process_manual_driving(delta: float) -> void:
 			_manual_linear_vel = move_toward(_manual_linear_vel, 0.0, linear_deceleration * delta)
 			if abs(_manual_linear_vel) < 0.05:
 				_manual_linear_vel = 0.0
-				if not _is_arm_tweening and arm_motion_state == ArmMotionState.STATIONARY:
+				if not _is_arm_tweening and arm_motion_state in [ArmMotionState.STATIONARY, ArmMotionState.TARGETING, ArmMotionState.HELD_READY]:
 					set_amr_state(AmrState.IDLE)
 
 	# Gravity
@@ -182,8 +681,7 @@ func _process_manual_driving(delta: float) -> void:
 	else:
 		velocity.y = 0.0
 
-	# Directional velocity in horizontal XZ plane
-	# -transform.basis.z is forward in Godot 3D
+	# Directional velocity in horizontal XZ plane (-transform.basis.z is forward in Godot 3D)
 	var forward_vec: Vector3 = -global_transform.basis.z
 	velocity.x = forward_vec.x * _manual_linear_vel
 	velocity.z = forward_vec.z * _manual_linear_vel
@@ -191,7 +689,7 @@ func _process_manual_driving(delta: float) -> void:
 	# Execute kinematic physics motion
 	move_and_slide()
 
-	# Dynamic impact physics with RigidBody3D obstacles (Storage Racks and Tote Boxes)
+	# Dynamic impact physics with RigidBody3D obstacles
 	for i in range(get_slide_collision_count()):
 		var col: KinematicCollision3D = get_slide_collision(i)
 		var collider = col.get_collider()
@@ -201,19 +699,32 @@ func _process_manual_driving(delta: float) -> void:
 			var contact_offset: Vector3 = col.get_position() - collider.global_position
 
 			if collider is ToteBox:
-				# Ramming / plowing lightweight physical tote boxes (12 kg)
 				var impulse_mag: float = impact_speed * 140.0 + 40.0
 				collider.apply_impulse(impulse_dir * impulse_mag * delta, contact_offset)
 			elif collider is ShelfPod:
-				# Off-center impact on heavy rack (280 kg) generates overturning torque
 				var impulse_mag: float = impact_speed * 2000.0 + 400.0
 				collider.apply_impulse(impulse_dir * impulse_mag * delta, contact_offset)
 
-			# Chassis absorbs kinetic recoil if high speed impact
-			if impact_speed > 2.2:
-				_manual_linear_vel = move_toward(_manual_linear_vel, 0.0, 10.0 * delta)
+			# Severe crash: boxes realistically tumble forward out of the tray onto floor
+			if impact_speed > 1.9:
+				_manual_linear_vel = move_toward(_manual_linear_vel, 0.0, 12.0 * delta)
 
-	# Safety boundary fallback clamp (walls will physically block first)
+				for slot_idx in [0, 1]:
+					var s_box = get_slot_box(slot_idx)
+					if s_box and is_instance_valid(s_box) and s_box.get_parent() == cargo_tray:
+						var s_world_tform: Transform3D = s_box.global_transform
+						cargo_tray.remove_child(s_box)
+						_get_world_root().add_child(s_box)
+						s_box.global_transform = s_world_tform
+						s_box.freeze = false
+						s_box.sleeping = false
+						PhysicsServer3D.body_set_state(s_box.get_rid(), PhysicsServer3D.BODY_STATE_SLEEPING, false)
+
+						# Forward momentum transfer: carries vehicle speed over the tray lip
+						var spill_vel: Vector3 = forward_vec * (impact_speed * 0.85) + Vector3(0.0, 0.35, 0.0) + impulse_dir * 0.2
+						s_box.linear_velocity = spill_vel
+						s_box.angular_velocity = Vector3(randf_range(1.5, 3.0), randf_range(-0.5, 0.5), randf_range(-0.5, 0.5))
+
 	global_position.x = clamp(global_position.x, -40.0, 40.0)
 	global_position.z = clamp(global_position.z, -40.0, 40.0)
 
@@ -222,226 +733,13 @@ func _process_manual_driving(delta: float) -> void:
 
 func _update_dev_status_label() -> void:
 	if label_status:
-		label_status.text = "%s [DEV BOT]\n⚡ %.0f%% | %.1f m/s\n%s\nTray: %d box(es)" % [
+		label_status.text = "%s [DEV BOT]\n⚡ %.0f%% | %.1f m/s\n%s\nTray: %d/2 box(es)" % [
 			robot_id,
 			battery_level,
 			current_speed,
 			_arm_status_text,
-			stowed_box_count
+			get_stowed_box_count()
 		]
-
-func _find_nearest_shelf() -> ShelfPod:
-	var nodes = get_tree().get_nodes_in_group("shelf_pods")
-	var nearest: ShelfPod = null
-	var min_dist: float = 5.0
-	for node in nodes:
-		if node is ShelfPod:
-			var d: float = global_position.distance_to(node.global_position)
-			if d < min_dist:
-				min_dist = d
-				nearest = node
-	return nearest
-
-func prepare_arm_for_pickup() -> void:
-	if _is_arm_tweening:
-		return
-	_is_arm_tweening = true
-	arm_motion_state = ArmMotionState.PREPARING
-	set_amr_state(AmrState.LIFTING)
-	SoundManager.play_spatial(self, SoundManager.sfx_arm_prepare, -1.0)
-
-	# Detect whether nearest rack is to Left or Right
-	var shelf: ShelfPod = _find_nearest_shelf()
-	if shelf:
-		var to_shelf: Vector3 = shelf.global_position - global_position
-		var local_shelf: Vector3 = global_transform.basis.inverse() * to_shelf
-		arm_reach_side = -1.0 if local_shelf.x < 0.0 else 1.0
-	else:
-		arm_reach_side = 1.0
-
-	_arm_status_text = "READY: [1-4] Select Tier | [E] Fold"
-	_update_dev_status_label()
-
-	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tween.tween_property(arm, "rotation:y", deg_to_rad(90.0 * arm_reach_side), 0.35)
-	tween.parallel().tween_property(shoulder, "rotation:x", deg_to_rad(-35.0), 0.35)
-	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(50.0), 0.35)
-	tween.parallel().tween_property(wrist, "rotation:x", deg_to_rad(-15.0), 0.35)
-
-	tween.finished.connect(func():
-		_is_arm_tweening = false
-		aim_arm_at_tier(1)
-	)
-
-func aim_arm_at_tier(tier: int) -> void:
-	selected_tier = clamp(tier, 1, 4)
-	arm_motion_state = ArmMotionState.AIMING_TIER
-	_is_arm_tweening = true
-
-	# Play audio with slightly rising pitch based on tier height
-	SoundManager.play_spatial(self, SoundManager.sfx_tier_select, 0.0, 0.85 + float(tier) * 0.12)
-
-	var shoulder_angle: float = 0.0
-	var elbow_angle: float = 0.0
-	var wrist_angle: float = 0.0
-
-	# Tier 1 is lowest floor (h=0.62m), Tier 4 is top floor (h=2.30m)
-	match selected_tier:
-		1: # Floor level (lowest)
-			shoulder_angle = deg_to_rad(-68.0)
-			elbow_angle = deg_to_rad(88.0)
-			wrist_angle = deg_to_rad(-20.0)
-		2: # Mid-low level
-			shoulder_angle = deg_to_rad(-46.0)
-			elbow_angle = deg_to_rad(65.0)
-			wrist_angle = deg_to_rad(-19.0)
-		3: # Mid-high level
-			shoulder_angle = deg_to_rad(-24.0)
-			elbow_angle = deg_to_rad(42.0)
-			wrist_angle = deg_to_rad(-18.0)
-		4: # Top rack floor (highest)
-			shoulder_angle = deg_to_rad(-2.0)
-			elbow_angle = deg_to_rad(20.0)
-			wrist_angle = deg_to_rad(-18.0)
-
-	_arm_status_text = "Tier %d Aimed: [F] Pick | [1-4] Tier | [E] Fold" % selected_tier
-	_update_dev_status_label()
-
-	var tween: Tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(arm, "rotation:y", deg_to_rad(90.0 * arm_reach_side), 0.28)
-	tween.parallel().tween_property(shoulder, "rotation:x", shoulder_angle, 0.28)
-	tween.parallel().tween_property(elbow, "rotation:x", elbow_angle, 0.28)
-	tween.parallel().tween_property(wrist, "rotation:x", wrist_angle, 0.28)
-
-	tween.finished.connect(func():
-		_is_arm_tweening = false
-	)
-
-func execute_pick_attempt() -> void:
-	if _is_arm_tweening:
-		return
-	_is_arm_tweening = true
-	arm_motion_state = ArmMotionState.PICKING
-	_arm_status_text = "Picking Tier %d..." % selected_tier
-	_update_dev_status_label()
-
-	var base_shoulder: float = shoulder.rotation.x
-	var base_elbow: float = elbow.rotation.x
-	var extend_shoulder: float = base_shoulder - deg_to_rad(8.0)
-	var extend_elbow: float = base_elbow + deg_to_rad(14.0)
-
-	var tween: Tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	# 1. Forward reach extension into shelf bay
-	tween.tween_property(shoulder, "rotation:x", extend_shoulder, 0.35)
-	tween.parallel().tween_property(elbow, "rotation:x", extend_elbow, 0.35)
-
-	# 2. Collision / box pick check
-	tween.tween_callback(func():
-		var shelf: ShelfPod = _find_nearest_shelf()
-		var picked: Dictionary = {"found": false}
-		if shelf and global_position.distance_to(shelf.global_position) <= 3.8:
-			var grip_pos: Vector3 = wrist.global_position
-			picked = shelf.pick_tote(selected_tier, grip_pos)
-
-		if picked.get("found", false):
-			has_gripped_box = true
-			_current_box_material = picked.get("material", null)
-			if gripped_box:
-				if _current_box_material:
-					gripped_box.material_override = _current_box_material
-				gripped_box.visible = true
-		else:
-			has_gripped_box = false
-	)
-
-	tween.tween_interval(0.2)
-	# 3. Retract back to aimed pose
-	tween.tween_property(shoulder, "rotation:x", base_shoulder, 0.35)
-	tween.parallel().tween_property(elbow, "rotation:x", base_elbow, 0.35)
-
-	tween.finished.connect(func():
-		_is_arm_tweening = false
-		if has_gripped_box:
-			arm_motion_state = ArmMotionState.GRIPPED
-			_arm_status_text = "📦 Box Gripped! Press [E] to stow in tray"
-			SoundManager.play_spatial(self, SoundManager.sfx_box_pick, +2.0)
-		else:
-			arm_motion_state = ArmMotionState.AIMING_TIER
-			_arm_status_text = "⚠️ No box reached. [1-4] Tier | [E] Fold"
-			SoundManager.play_spatial(self, SoundManager.sfx_cancel, -3.0)
-		_update_dev_status_label()
-	)
-
-func stow_box_to_tray() -> void:
-	if _is_arm_tweening:
-		return
-	_is_arm_tweening = true
-	arm_motion_state = ArmMotionState.STOWING
-	_arm_status_text = "Stowing box into cargo tray..."
-	_update_dev_status_label()
-
-	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-
-	# 1. Swivel backwards 180 degrees towards rear tray
-	tween.tween_property(arm, "rotation:y", deg_to_rad(180.0), 0.45)
-	tween.parallel().tween_property(shoulder, "rotation:x", deg_to_rad(-45.0), 0.45)
-	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(75.0), 0.45)
-	tween.parallel().tween_property(wrist, "rotation:x", deg_to_rad(-30.0), 0.45)
-
-	# 2. Lower onto tray bed
-	tween.tween_property(shoulder, "rotation:x", deg_to_rad(-55.0), 0.25)
-	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(90.0), 0.25)
-
-	# 3. Release box to tray
-	tween.tween_callback(func():
-		if gripped_box:
-			gripped_box.visible = false
-		if tray_box:
-			if _current_box_material:
-				tray_box.material_override = _current_box_material
-			tray_box.visible = true
-		stowed_box_count += 1
-		has_gripped_box = false
-		SoundManager.play_spatial(self, SoundManager.sfx_box_stow, +1.0)
-	)
-
-	tween.tween_interval(0.12)
-
-	# 4. Fold back to stationary home travel pose
-	tween.tween_property(arm, "rotation:y", 0.0, 0.4)
-	tween.parallel().tween_property(shoulder, "rotation:x", deg_to_rad(-25.0), 0.4)
-	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(45.0), 0.4)
-	tween.parallel().tween_property(wrist, "rotation:x", deg_to_rad(-20.0), 0.4)
-
-	tween.finished.connect(func():
-		_is_arm_tweening = false
-		arm_motion_state = ArmMotionState.STATIONARY
-		set_amr_state(AmrState.IDLE)
-		_arm_status_text = "📦 Box Stowed! [WASD] Drive | [E] Pick again"
-		_update_dev_status_label()
-	)
-
-func return_arm_to_stationary() -> void:
-	if _is_arm_tweening:
-		return
-	_is_arm_tweening = true
-	_arm_status_text = "Folding arm to stationary..."
-	_update_dev_status_label()
-	SoundManager.play_spatial(self, SoundManager.sfx_cancel, -2.0)
-
-	var tween: Tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(arm, "rotation:y", 0.0, 0.35)
-	tween.parallel().tween_property(shoulder, "rotation:x", deg_to_rad(-25.0), 0.35)
-	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(45.0), 0.35)
-	tween.parallel().tween_property(wrist, "rotation:x", deg_to_rad(-20.0), 0.35)
-
-	tween.finished.connect(func():
-		_is_arm_tweening = false
-		arm_motion_state = ArmMotionState.STATIONARY
-		set_amr_state(AmrState.IDLE)
-		_arm_status_text = "[WASD] Drive | [E] Prep Arm"
-		_update_dev_status_label()
-	)
 
 func set_amr_state(new_state: AmrState) -> void:
 	current_state = new_state
@@ -467,7 +765,7 @@ func set_amr_state(new_state: AmrState) -> void:
 			current_speed = 0.0
 		AmrState.LIFTING:
 			state_color = COLOR_LIFTING
-			state_text = "LIFTING SHELF POD"
+			state_text = "ARM MANIPULATION"
 			current_speed = 0.2
 		AmrState.CHARGING:
 			state_color = COLOR_CHARGING
@@ -546,26 +844,30 @@ func reset_robot(spawn_pos: Vector3, spawn_rot_y: float = 0.0) -> void:
 	_was_braking = false
 	_is_arm_tweening = false
 
-	# Reset arm motion state and joints to folded home pose
+	# Release any gripped box
+	if held_box and is_instance_valid(held_box):
+		if held_box.get_parent() == gripped_socket:
+			gripped_socket.remove_child(held_box)
+			_get_world_root().add_child(held_box)
+		held_box.freeze = false
+	held_box = null
+
+	# Unparent any stowed boxes back to world root
+	for slot_idx in [0, 1]:
+		var s_box = get_slot_box(slot_idx)
+		if s_box and is_instance_valid(s_box) and s_box.get_parent() == cargo_tray:
+			cargo_tray.remove_child(s_box)
+			_get_world_root().add_child(s_box)
+			s_box.freeze = false
+
+	active_target_box = null
+
+	if target_reticle:
+		target_reticle.visible = false
+
+	_fold_arm_to_home_instant()
+
 	arm_motion_state = ArmMotionState.STATIONARY
-	has_gripped_box = false
-	stowed_box_count = 0
-	_current_box_material = null
-
-	if gripped_box:
-		gripped_box.visible = false
-	if tray_box:
-		tray_box.visible = false
-
-	if arm:
-		arm.rotation.y = 0.0
-	if shoulder:
-		shoulder.rotation.x = deg_to_rad(-25.0)
-	if elbow:
-		elbow.rotation.x = deg_to_rad(45.0)
-	if wrist:
-		wrist.rotation.x = deg_to_rad(-20.0)
-
 	set_amr_state(AmrState.IDLE)
-	_arm_status_text = "[WASD] Drive | [E] Prep Arm"
+	_arm_status_text = "[WASD] Drive | Click/E: Target Box"
 	_update_dev_status_label()
