@@ -510,17 +510,33 @@ layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_btn_outbound")
 text = "📤 Xuất Hàng (Out)"
 
-[node name="BtnConflict" type="Button" parent="BottomBar/Controls"]
-custom_minimum_size = Vector2(160, 36)
+[node name="BtnDevCam" type="Button" parent="BottomBar/Controls"]
+custom_minimum_size = Vector2(130, 36)
 layout_mode = 2
+focus_mode = 0
 theme_override_styles/normal = SubResource("StyleBoxFlat_btn_accent")
-text = "⚡ 4-Way Conflict Demo"
+text = "🎥 Chase Cam [C]"
 
-[node name="BtnAuto" type="Button" parent="BottomBar/Controls"]
+[node name="BtnSpawnCenter" type="Button" parent="BottomBar/Controls"]
+custom_minimum_size = Vector2(100, 36)
+layout_mode = 2
+focus_mode = 0
+theme_override_styles/normal = SubResource("StyleBoxFlat_card")
+text = "📍 Center"
+
+[node name="BtnSpawnDock" type="Button" parent="BottomBar/Controls"]
 custom_minimum_size = Vector2(110, 36)
 layout_mode = 2
+focus_mode = 0
 theme_override_styles/normal = SubResource("StyleBoxFlat_card")
-text = "🔄 Auto In/Out"
+text = "📍 Inbound"
+
+[node name="BtnSpawnPick" type="Button" parent="BottomBar/Controls"]
+custom_minimum_size = Vector2(110, 36)
+layout_mode = 2
+focus_mode = 0
+theme_override_styles/normal = SubResource("StyleBoxFlat_card")
+text = "📍 Pick Stn"
 
 [node name="BtnCam1" type="Button" parent="BottomBar/Controls"]
 custom_minimum_size = Vector2(80, 36)

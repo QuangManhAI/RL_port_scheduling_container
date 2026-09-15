@@ -15,10 +15,72 @@ extends Node3D
 @onready var label_t3: Label3D = $LabelTier3
 @onready var label_t4: Label3D = $LabelTier4
 
+@onready var tote_t1_l: MeshInstance3D = $ToteTier1_L
+@onready var tote_t1_r: MeshInstance3D = $ToteTier1_R
+@onready var tote_t2_l: MeshInstance3D = $ToteTier2_L
+@onready var tote_t2_r: MeshInstance3D = $ToteTier2_R
+@onready var tote_t3_l: MeshInstance3D = $ToteTier3_L
+@onready var tote_t3_r: MeshInstance3D = $ToteTier3_R
+@onready var tote_t4_l: MeshInstance3D = $ToteTier4_L
+@onready var tote_t4_r: MeshInstance3D = $ToteTier4_R
+
 var _tote_materials: Array[StandardMaterial3D] = []
 
 func _ready() -> void:
-	pass
+	add_to_group("shelf_pods")
+
+func get_tote_at(tier: int, check_pos: Vector3) -> MeshInstance3D:
+	var left_node: MeshInstance3D = null
+	var right_node: MeshInstance3D = null
+	match tier:
+		1:
+			left_node = tote_t1_l
+			right_node = tote_t1_r
+		2:
+			left_node = tote_t2_l
+			right_node = tote_t2_r
+		3:
+			left_node = tote_t3_l
+			right_node = tote_t3_r
+		4:
+			left_node = tote_t4_l
+			right_node = tote_t4_r
+
+	if not left_node or not right_node:
+		return null
+
+	var left_dist: float = left_node.global_position.distance_to(check_pos)
+	var right_dist: float = right_node.global_position.distance_to(check_pos)
+
+	if left_dist < right_dist:
+		if left_node.visible:
+			return left_node
+		elif right_node.visible:
+			return right_node
+	else:
+		if right_node.visible:
+			return right_node
+		elif left_node.visible:
+			return left_node
+	return null
+
+func pick_tote(tier: int, check_pos: Vector3) -> Dictionary:
+	var tote: MeshInstance3D = get_tote_at(tier, check_pos)
+	if tote and tote.visible:
+		tote.visible = false
+		return {
+			"found": true,
+			"material": tote.material_override,
+			"tier": tier,
+			"sku_zone": zone_name
+		}
+	return {"found": false}
+
+func reset_totes() -> void:
+	for t in [tote_t1_l, tote_t1_r, tote_t2_l, tote_t2_r, tote_t3_l, tote_t3_r, tote_t4_l, tote_t4_r]:
+		if t:
+			t.visible = true
+
 
 func setup(p_id: int, p_zone: String = "Zone A", p_cat: String = "FMCG", zone_col: Color = Color(0.0, 0.8, 1.0)) -> void:
 	pod_id = p_id
