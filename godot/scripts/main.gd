@@ -39,11 +39,11 @@ func _ready() -> void:
 	if hud:
 		hud.dispatch_inbound_requested.connect(_on_dispatch_inbound)
 		hud.dispatch_outbound_requested.connect(_on_dispatch_outbound)
-		hud.conflict_demo_requested.connect(_on_simulate_4way_conflict)
-		hud.auto_fleet_toggled.connect(_on_auto_fleet_toggled)
 		hud.reset_requested.connect(_on_reset_floor)
 		hud.camera_preset_requested.connect(_on_camera_preset_requested)
 		hud.fullscreen_toggled.connect(toggle_fullscreen)
+		hud.chase_cam_toggled.connect(_on_toggle_chase_cam)
+		hud.spawn_dev_bot_requested.connect(_on_spawn_dev_bot)
 
 	if sim_client:
 		sim_client.connected_to_server.connect(_on_server_connected)
@@ -53,22 +53,15 @@ func _ready() -> void:
 	_reset_fleet_positions()
 	_refresh_manifest_ui()
 
-	hud.log_event("[color=green]RAMemory Mission Control WES Digital Twin v2.2 Initialized.[/color]")
-	hud.log_event("[color=cyan]Zoned Multi-Tier Inventory: Zone A (FMCG), Zone B (Tech), Zone C (Pharma), Zone D (Bulky).[/color]")
-	hud.log_event("[color=yellow]Press '📥 Nhập Hàng (In)' to receive inbound freight or '📤 Xuất Hàng (Out)' to pick orders.[/color]")
+	if camera_rig and amr_1:
+		camera_rig.toggle_follow_target(amr_1)
+
+	hud.log_event("[color=green]🎮 ENVIRONMENT BUILDING SECTOR ACTIVE[/color]")
+	hud.log_event("[color=cyan]DEV MANUAL BOT [DEV-01] initialized at intersection (0,0). Drive freely to inspect warehouse floor![/color]")
+	hud.log_event("[color=yellow]Controls: W/S or UP/DOWN to Drive | A/D or LEFT/RIGHT to Steer | Space: Brake | C: Chase Cam | 1-4: Overhead Cameras[/color]")
 
 func _process(delta: float) -> void:
 	_update_fleet_telemetry_and_radar()
-
-	if _is_auto_running:
-		_auto_timer += delta
-		if _auto_timer >= 6.5:
-			_auto_timer = 0.0
-			if _auto_turn % 2 == 0:
-				_on_dispatch_inbound()
-			else:
-				_on_dispatch_outbound()
-			_auto_turn += 1
 
 func _update_fleet_telemetry_and_radar() -> void:
 	var fleet: Array[AmrRobot] = [amr_1, amr_2, amr_3, amr_4]
@@ -103,6 +96,12 @@ func _update_fleet_telemetry_and_radar() -> void:
 				colors[i]
 			)
 
+	if hud and amr_1:
+		hud.update_ai_inspector(
+			"🎮 [DEV-01] PILOT: Pos (X: %.1f, Z: %.1f) | Spd: %.1f m/s | Hdg: %.0f°" % [amr_1.global_position.x, amr_1.global_position.z, amr_1.current_speed, rad_to_deg(amr_1.rotation.y)],
+			"WASD / Arrows: Drive | Space: Brake | C: Chase Cam | 1-4: Overhead Views"
+		)
+
 func _refresh_manifest_ui() -> void:
 	if not hud:
 		return
@@ -117,15 +116,17 @@ func _refresh_manifest_ui() -> void:
 		hud.update_manifest_outbound(i + 1, "%s: %s [%s:T%d] -> Stn %d (%s)" % [ord["id"], ord["sku"], ord["zone"], ord["tier"], ord["station"], ord["state"]], col)
 
 func _reset_fleet_positions() -> void:
-	amr_1.global_position = Vector3(-25.0, 0.0, 0.0)
+	amr_1.robot_id = "DEV-01"
+	amr_1.is_manual_control = true
+	amr_1.global_position = Vector3(0.0, 0.0, 0.0)
 	amr_1.rotation = Vector3.ZERO
 	amr_1.set_amr_state(AmrRobot.AmrState.IDLE)
 
-	amr_2.global_position = Vector3(0.0, 0.0, -25.0)
+	amr_2.global_position = Vector3(18.0, 0.0, -10.0)
 	amr_2.rotation = Vector3.ZERO
 	amr_2.set_amr_state(AmrRobot.AmrState.IDLE)
 
-	amr_3.global_position = Vector3(18.0, 0.0, -10.0)
+	amr_3.global_position = Vector3(-18.0, 0.0, 10.0)
 	amr_3.rotation = Vector3.ZERO
 	amr_3.set_amr_state(AmrRobot.AmrState.IDLE)
 
@@ -135,9 +136,32 @@ func _reset_fleet_positions() -> void:
 
 	if hud:
 		hud.update_ai_inspector(
-			"MARL Dynamic Flow: Clear (Nominal routing across 4 aisles)",
-			"OR Safety Guardrail: 100% Deterministic Collision Prevention PASS"
+			"🎮 [DEV-01] PILOT: Ready at Center (0,0)",
+			"WASD / Arrows: Drive | Space: Brake | C: Chase Cam"
 		)
+
+func _on_toggle_chase_cam() -> void:
+	if camera_rig and amr_1:
+		var is_chasing = camera_rig.toggle_follow_target(amr_1)
+		if hud:
+			hud.log_event("[color=cyan]🎥 Camera mode: %s[/color]" % ("CHASE FOLLOW [DEV-01]" if is_chasing else "FREE RTS OVERVIEW"))
+
+func _on_spawn_dev_bot(location: String) -> void:
+	if not amr_1:
+		return
+	match location:
+		"CENTER":
+			amr_1.global_position = Vector3(0.0, 0.0, 0.0)
+			amr_1.rotation = Vector3.ZERO
+			hud.log_event("[color=yellow]📍 DEV-01 spawned at Center 4-Way Intersection (0,0).[/color]")
+		"DOCK":
+			amr_1.global_position = Vector3(0.0, 0.0, -28.0)
+			amr_1.rotation = Vector3(0, deg_to_rad(180), 0)
+			hud.log_event("[color=yellow]📍 DEV-01 spawned at Inbound Receiving Dock (0, -28).[/color]")
+		"PICK":
+			amr_1.global_position = Vector3(0.0, 0.0, 24.0)
+			amr_1.rotation = Vector3.ZERO
+			hud.log_event("[color=yellow]📍 DEV-01 spawned at Outbound Pick Station (0, 24).[/color]")
 
 func _on_dispatch_inbound() -> void:
 	var order_idx: int = _cur_inbound_idx % inbound_orders.size()

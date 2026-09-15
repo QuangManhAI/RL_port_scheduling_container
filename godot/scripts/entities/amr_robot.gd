@@ -23,6 +23,10 @@ const COLOR_CHARGING: Color = Color(0.1, 0.9, 0.4)     # Emerald (Charging)
 @export var max_speed: float = 6.5
 @export var battery_level: float = 100.0
 @export var current_task_str: String = "STANDBY"
+@export var is_manual_control: bool = false
+@export var linear_acceleration: float = 9.0
+@export var linear_deceleration: float = 14.0
+@export var turn_speed: float = 3.2
 
 @onready var turntable: Node3D = $Chassis/ElevatingTurntable
 @onready var led_ring: MeshInstance3D = $Chassis/LedRing
@@ -32,6 +36,7 @@ const COLOR_CHARGING: Color = Color(0.1, 0.9, 0.4)     # Emerald (Charging)
 var current_state: AmrState = AmrState.IDLE
 var carried_pod: ShelfPod = null
 var current_speed: float = 0.0
+var _manual_linear_vel: float = 0.0
 var _led_material: StandardMaterial3D
 var _laser_material: StandardMaterial3D
 
@@ -55,6 +60,60 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if laser_plane:
 		laser_plane.rotate_y(delta * 8.0)
+
+func _physics_process(delta: float) -> void:
+	if is_manual_control:
+		_process_manual_driving(delta)
+
+func _process_manual_driving(delta: float) -> void:
+	var move_input: float = 0.0
+	var turn_input: float = 0.0
+	var is_braking: bool = Input.is_key_pressed(KEY_SPACE)
+
+	# Forward / Reverse
+	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
+		move_input += 1.0
+	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
+		move_input -= 0.65
+
+	# Left / Right Rotation
+	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+		turn_input += 1.0
+	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+		turn_input -= 1.0
+
+	# Apply rotation in place
+	if abs(turn_input) > 0.01:
+		rotate_y(turn_input * turn_speed * delta)
+
+	# Apply linear acceleration / deceleration
+	if is_braking:
+		_manual_linear_vel = move_toward(_manual_linear_vel, 0.0, linear_deceleration * 2.0 * delta)
+		set_amr_state(AmrState.BLOCKED_SAFETY)
+	elif abs(move_input) > 0.01:
+		var target_v: float = move_input * max_speed
+		_manual_linear_vel = move_toward(_manual_linear_vel, target_v, linear_acceleration * delta)
+		set_amr_state(AmrState.MOVING)
+	else:
+		_manual_linear_vel = move_toward(_manual_linear_vel, 0.0, linear_deceleration * delta)
+		if abs(_manual_linear_vel) < 0.05:
+			_manual_linear_vel = 0.0
+			set_amr_state(AmrState.IDLE)
+
+	# Forward translation (-transform.basis.z is forward in Godot 3D)
+	if abs(_manual_linear_vel) > 0.01:
+		var forward_vec: Vector3 = -global_transform.basis.z
+		global_position += forward_vec * _manual_linear_vel * delta
+
+	# Floor boundary safety clamp
+	global_position.x = clamp(global_position.x, -33.0, 33.0)
+	global_position.z = clamp(global_position.z, -35.0, 32.0)
+
+	current_speed = abs(_manual_linear_vel)
+	current_task_str = "MANUAL PILOT"
+
+	if label_status:
+		label_status.text = "%s [DEV BOT]\n⚡ %.0f%% | %.1f m/s" % [robot_id, battery_level, current_speed]
 
 func set_amr_state(new_state: AmrState) -> void:
 	current_state = new_state

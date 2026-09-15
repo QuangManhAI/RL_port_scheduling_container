@@ -14,10 +14,25 @@ extends Node3D
 
 var _is_orbiting: bool = false
 var _current_zoom: float = 45.0
+var follow_target: Node3D = null
+var is_following: bool = false
 
 func _ready() -> void:
 	_current_zoom = camera_3d.position.z
 	set_view_overview()
+
+func toggle_follow_target(target: Node3D = null) -> bool:
+	if target != null:
+		follow_target = target
+	if follow_target == null:
+		is_following = false
+		return false
+
+	is_following = not is_following
+	if is_following:
+		_current_zoom = 18.0
+		elevation_pivot.rotation.x = deg_to_rad(-32.0)
+	return is_following
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
@@ -38,31 +53,40 @@ func _unhandled_input(event: InputEvent) -> void:
 			deg_to_rad(-10.0)
 		)
 
-	elif event is InputEventKey and event.pressed:
+	elif event is InputEventKey and event.pressed and not event.echo:
 		var key: InputEventKey = event as InputEventKey
-		if key.keycode == KEY_1:
+		if key.keycode == KEY_C:
+			toggle_follow_target()
+		elif key.keycode == KEY_1:
+			is_following = false
 			set_view_overview()
 		elif key.keycode == KEY_2:
+			is_following = false
 			set_view_topdown()
 		elif key.keycode == KEY_3:
+			is_following = false
 			set_view_pick_station()
 		elif key.keycode == KEY_4:
+			is_following = false
 			set_view_charging_dock()
 
 func _process(delta: float) -> void:
-	var move_dir: Vector3 = Vector3.ZERO
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
-		move_dir += -global_transform.basis.z
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
-		move_dir += global_transform.basis.z
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
-		move_dir += -global_transform.basis.x
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
-		move_dir += global_transform.basis.x
+	if is_following and follow_target != null:
+		global_position = lerp(global_position, follow_target.global_position, delta * 10.0)
+	else:
+		var move_dir: Vector3 = Vector3.ZERO
+		if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
+			move_dir += -global_transform.basis.z
+		if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
+			move_dir += global_transform.basis.z
+		if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+			move_dir += -global_transform.basis.x
+		if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+			move_dir += global_transform.basis.x
 
-	move_dir.y = 0.0
-	if move_dir.length_squared() > 0.01:
-		global_position += move_dir.normalized() * pan_speed * delta
+		move_dir.y = 0.0
+		if move_dir.length_squared() > 0.01:
+			global_position += move_dir.normalized() * pan_speed * delta
 
 	camera_3d.position.z = lerp(camera_3d.position.z, _current_zoom, delta * 10.0)
 
