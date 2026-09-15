@@ -18,6 +18,7 @@ var _auto_timer: float = 0.0
 var _is_auto_running: bool = false
 var _auto_turn: int = 0
 var _total_manifests: int = 42
+var _last_fullscreen_toggle_time: int = 0
 
 var inbound_orders: Array[Dictionary] = [
 	{"id": "PO-101", "sku": "FMCG Beverage", "zone": "Zone A", "pod_id": 1, "tier": 2, "state": "PENDING"},
@@ -315,19 +316,35 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		var key: InputEventKey = event as InputEventKey
 		if key.keycode == KEY_F11 or (key.keycode == KEY_ENTER and key.alt_pressed):
+			get_viewport().set_input_as_handled()
 			toggle_fullscreen()
 
 func toggle_fullscreen() -> void:
+	var now: int = Time.get_ticks_msec()
+	if now - _last_fullscreen_toggle_time < 400:
+		return
+	_last_fullscreen_toggle_time = now
+
 	var cur_mode: DisplayServer.WindowMode = DisplayServer.window_get_mode()
-	if cur_mode == DisplayServer.WINDOW_MODE_FULLSCREEN or cur_mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
+	var is_fullscreen_now: bool = (cur_mode == DisplayServer.WINDOW_MODE_FULLSCREEN or cur_mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN)
+
+	if is_fullscreen_now:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		var screen_size: Vector2i = DisplayServer.screen_get_size()
+		var target_w: int = int(min(1600, screen_size.x * 0.85))
+		var target_h: int = int(min(900, screen_size.y * 0.85))
+		DisplayServer.window_set_size(Vector2i(target_w, target_h))
+		DisplayServer.window_set_position(Vector2i(
+			max(0, (screen_size.x - target_w) / 2),
+			max(0, (screen_size.y - target_h) / 2)
+		))
 		if hud and hud.btn_fullscreen:
 			hud.btn_fullscreen.text = "⛶ Full [F11]"
 		if hud:
-			hud.log_event("[color=yellow]Window display switched to Windowed mode.[/color]")
+			hud.log_event("[color=yellow]Window display switched to Windowed (%dx%d).[/color]" % [target_w, target_h])
 	else:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 		if hud and hud.btn_fullscreen:
 			hud.btn_fullscreen.text = "🗗 Window [F11]"
 		if hud:
-			hud.log_event("[color=cyan]Window display switched to Fullscreen mode (Press F11 or Alt+Enter to exit).[/color]")
+			hud.log_event("[color=cyan]Window display switched to Fullscreen (Press F11 or Alt+Enter to exit).[/color]")

@@ -555,6 +555,7 @@ text = "↺ Reset"
 [node name="BtnFullscreen" type="Button" parent="BottomBar/Controls"]
 custom_minimum_size = Vector2(95, 36)
 layout_mode = 2
+focus_mode = 0
 theme_override_styles/normal = SubResource("StyleBoxFlat_card")
 text = "⛶ Full [F11]"
 
