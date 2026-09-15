@@ -37,15 +37,31 @@ const COLOR_CHARGING: Color = Color(0.1, 0.9, 0.4)     # Emerald (Charging)
 @onready var tray_box: MeshInstance3D = $Chassis/CargoTray/TrayBox1
 @onready var side_strip_left: MeshInstance3D = $Chassis/SideLedStripLeft
 @onready var side_strip_right: MeshInstance3D = $Chassis/SideLedStripRight
+enum ArmMotionState {
+	STATIONARY,
+	PREPARING,
+	AIMING_TIER,
+	PICKING,
+	GRIPPED,
+	STOWING
+}
+
 @onready var label_status: Label3D = $StatusBadge
 
 var current_state: AmrState = AmrState.IDLE
+var arm_motion_state: ArmMotionState = ArmMotionState.STATIONARY
 var carried_pod: ShelfPod = null
 var current_speed: float = 0.0
 var _manual_linear_vel: float = 0.0
 var _led_material: StandardMaterial3D
-var _is_arm_animating: bool = false
-var _last_arm_trigger_time: int = 0
+
+var has_gripped_box: bool = false
+var selected_tier: int = 1
+var arm_reach_side: float = 1.0
+var stowed_box_count: int = 0
+var _current_box_material: Material = null
+var _is_arm_tweening: bool = false
+var _arm_status_text: String = "[WASD] Drive | [E] Prep Arm"
 
 func _ready() -> void:
 	_led_material = StandardMaterial3D.new()
@@ -56,8 +72,57 @@ func _ready() -> void:
 	if side_strip_right:
 		side_strip_right.set_surface_override_material(0, _led_material)
 
-	set_amr_state(AmrState.IDLE)
+	if gripped_box:
+		gripped_box.visible = false
+	if tray_box:
+		tray_box.visible = false
 
+	# Initial home fold (stationary resting pose)
+	if arm: arm.rotation.y = 0.0
+	if shoulder: shoulder.rotation.x = deg_to_rad(-25.0)
+	if elbow: elbow.rotation.x = deg_to_rad(45.0)
+	if wrist: wrist.rotation.x = deg_to_rad(-20.0)
+
+	set_amr_state(AmrState.IDLE)
+	_update_dev_status_label()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not is_manual_control or _is_arm_tweening:
+		return
+
+	if event is InputEventKey and event.pressed and not event.echo:
+		var key: InputEventKey = event as InputEventKey
+
+		# [E] Key: State Machine Driver
+		if key.keycode == KEY_E:
+			match arm_motion_state:
+				ArmMotionState.STATIONARY:
+					prepare_arm_for_pickup()
+					get_viewport().set_input_as_handled()
+				ArmMotionState.PREPARING, ArmMotionState.AIMING_TIER:
+					return_arm_to_stationary()
+					get_viewport().set_input_as_handled()
+				ArmMotionState.GRIPPED:
+					stow_box_to_tray()
+					get_viewport().set_input_as_handled()
+
+		# [1, 2, 3, 4] Keys: Select Rack Tier
+		elif key.keycode in [KEY_1, KEY_2, KEY_3, KEY_4]:
+			if arm_motion_state == ArmMotionState.PREPARING or arm_motion_state == ArmMotionState.AIMING_TIER:
+				var tier: int = 1
+				match key.keycode:
+					KEY_1: tier = 1
+					KEY_2: tier = 2
+					KEY_3: tier = 3
+					KEY_4: tier = 4
+				aim_arm_at_tier(tier)
+				get_viewport().set_input_as_handled()
+
+		# [F] Key: Pick up Box
+		elif key.keycode == KEY_F:
+			if arm_motion_state == ArmMotionState.AIMING_TIER or arm_motion_state == ArmMotionState.PREPARING:
+				execute_pick_attempt()
+				get_viewport().set_input_as_handled()
 
 func _physics_process(delta: float) -> void:
 	if is_manual_control:
@@ -68,17 +133,19 @@ func _process_manual_driving(delta: float) -> void:
 	var turn_input: float = 0.0
 	var is_braking: bool = Input.is_key_pressed(KEY_SPACE)
 
-	# Forward / Reverse
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
-		move_input += 1.0
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
-		move_input -= 0.65
+	# Only allow driving when arm is not extending/stowing
+	if not _is_arm_tweening:
+		# Forward / Reverse
+		if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
+			move_input += 1.0
+		if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
+			move_input -= 0.65
 
-	# Left / Right Rotation
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
-		turn_input += 1.0
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
-		turn_input -= 1.0
+		# Left / Right Rotation
+		if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+			turn_input += 1.0
+		if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+			turn_input -= 1.0
 
 	# Apply rotation in place
 	if abs(turn_input) > 0.01:
@@ -96,7 +163,8 @@ func _process_manual_driving(delta: float) -> void:
 		_manual_linear_vel = move_toward(_manual_linear_vel, 0.0, linear_deceleration * delta)
 		if abs(_manual_linear_vel) < 0.05:
 			_manual_linear_vel = 0.0
-			set_amr_state(AmrState.IDLE)
+			if not _is_arm_tweening and arm_motion_state == ArmMotionState.STATIONARY:
+				set_amr_state(AmrState.IDLE)
 
 	# Forward translation (-transform.basis.z is forward in Godot 3D)
 	if abs(_manual_linear_vel) > 0.01:
@@ -107,50 +175,221 @@ func _process_manual_driving(delta: float) -> void:
 	global_position.x = clamp(global_position.x, -33.0, 33.0)
 	global_position.z = clamp(global_position.z, -35.0, 32.0)
 
-	# Arm reach triggers (E: Reach Right, Q: Reach Left)
-	var now: int = Time.get_ticks_msec()
-	if now - _last_arm_trigger_time > 1600 and not _is_arm_animating:
-		if Input.is_key_pressed(KEY_E):
-			_last_arm_trigger_time = now
-			animate_arm_reach(1.0)
-		elif Input.is_key_pressed(KEY_Q):
-			_last_arm_trigger_time = now
-			animate_arm_reach(-1.0)
-
 	current_speed = abs(_manual_linear_vel)
-	current_task_str = "MANUAL PILOT"
+	_update_dev_status_label()
 
+func _update_dev_status_label() -> void:
 	if label_status:
-		label_status.text = "%s [DEV BOT]\n⚡ %.0f%% | %.1f m/s\n[E/Q] Arm Pick" % [robot_id, battery_level, current_speed]
+		label_status.text = "%s [DEV BOT]\n⚡ %.0f%% | %.1f m/s\n%s\nTray: %d box(es)" % [
+			robot_id,
+			battery_level,
+			current_speed,
+			_arm_status_text,
+			stowed_box_count
+		]
 
-func animate_arm_reach(side: float = 1.0) -> void:
-	if _is_arm_animating:
+func _find_nearest_shelf() -> ShelfPod:
+	var nodes = get_tree().get_nodes_in_group("shelf_pods")
+	var nearest: ShelfPod = null
+	var min_dist: float = 5.0
+	for node in nodes:
+		if node is ShelfPod:
+			var d: float = global_position.distance_to(node.global_position)
+			if d < min_dist:
+				min_dist = d
+				nearest = node
+	return nearest
+
+func prepare_arm_for_pickup() -> void:
+	if _is_arm_tweening:
 		return
-	_is_arm_animating = true
+	_is_arm_tweening = true
+	arm_motion_state = ArmMotionState.PREPARING
 	set_amr_state(AmrState.LIFTING)
 
-	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	# 1. Swivel turret to shelf side and reach out
-	tween.tween_property(arm, "rotation:y", deg_to_rad(85.0 * side), 0.45)
-	tween.parallel().tween_property(shoulder, "rotation:x", deg_to_rad(-10.0), 0.45)
-	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(60.0), 0.45)
-	
-	# 2. Grip dwell
-	tween.tween_interval(0.3)
-	
-	# 3. Retract back towards onboard cargo tray
-	tween.tween_property(arm, "rotation:y", deg_to_rad(180.0), 0.5)
-	tween.parallel().tween_property(shoulder, "rotation:x", deg_to_rad(-45.0), 0.5)
-	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(85.0), 0.5)
+	# Detect whether nearest rack is to Left or Right
+	var shelf: ShelfPod = _find_nearest_shelf()
+	if shelf:
+		var to_shelf: Vector3 = shelf.global_position - global_position
+		var local_shelf: Vector3 = global_transform.basis.inverse() * to_shelf
+		arm_reach_side = -1.0 if local_shelf.x < 0.0 else 1.0
+	else:
+		arm_reach_side = 1.0
 
-	# 4. Return to home forward travel pose
+	_arm_status_text = "READY: [1-4] Select Tier | [E] Fold"
+	_update_dev_status_label()
+
+	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(arm, "rotation:y", deg_to_rad(90.0 * arm_reach_side), 0.35)
+	tween.parallel().tween_property(shoulder, "rotation:x", deg_to_rad(-18.0), 0.35)
+	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(35.0), 0.35)
+	tween.parallel().tween_property(wrist, "rotation:x", deg_to_rad(-15.0), 0.35)
+
+	tween.finished.connect(func():
+		_is_arm_tweening = false
+		aim_arm_at_tier(1)
+	)
+
+func aim_arm_at_tier(tier: int) -> void:
+	selected_tier = clamp(tier, 1, 4)
+	arm_motion_state = ArmMotionState.AIMING_TIER
+	_is_arm_tweening = true
+
+	var shoulder_angle: float = 0.0
+	var elbow_angle: float = 0.0
+	var wrist_angle: float = 0.0
+
+	match selected_tier:
+		1:
+			shoulder_angle = deg_to_rad(-10.0)
+			elbow_angle = deg_to_rad(25.0)
+			wrist_angle = deg_to_rad(-15.0)
+		2:
+			shoulder_angle = deg_to_rad(-30.0)
+			elbow_angle = deg_to_rad(50.0)
+			wrist_angle = deg_to_rad(-20.0)
+		3:
+			shoulder_angle = deg_to_rad(-52.0)
+			elbow_angle = deg_to_rad(74.0)
+			wrist_angle = deg_to_rad(-22.0)
+		4:
+			shoulder_angle = deg_to_rad(-72.0)
+			elbow_angle = deg_to_rad(96.0)
+			wrist_angle = deg_to_rad(-24.0)
+
+	_arm_status_text = "Tier %d Aimed: [F] Pick | [1-4] Tier | [E] Fold" % selected_tier
+	_update_dev_status_label()
+
+	var tween: Tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(arm, "rotation:y", deg_to_rad(90.0 * arm_reach_side), 0.28)
+	tween.parallel().tween_property(shoulder, "rotation:x", shoulder_angle, 0.28)
+	tween.parallel().tween_property(elbow, "rotation:x", elbow_angle, 0.28)
+	tween.parallel().tween_property(wrist, "rotation:x", wrist_angle, 0.28)
+
+	tween.finished.connect(func():
+		_is_arm_tweening = false
+	)
+
+func execute_pick_attempt() -> void:
+	if _is_arm_tweening:
+		return
+	_is_arm_tweening = true
+	arm_motion_state = ArmMotionState.PICKING
+	_arm_status_text = "Picking Tier %d..." % selected_tier
+	_update_dev_status_label()
+
+	var base_shoulder: float = shoulder.rotation.x
+	var base_elbow: float = elbow.rotation.x
+	var extend_shoulder: float = base_shoulder + deg_to_rad(15.0)
+	var extend_elbow: float = base_elbow - deg_to_rad(20.0)
+
+	var tween: Tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	# 1. Forward reach extension into shelf bay
+	tween.tween_property(shoulder, "rotation:x", extend_shoulder, 0.35)
+	tween.parallel().tween_property(elbow, "rotation:x", extend_elbow, 0.35)
+
+	# 2. Collision / box pick check
+	tween.tween_callback(func():
+		var shelf: ShelfPod = _find_nearest_shelf()
+		var picked: Dictionary = {"found": false}
+		if shelf and global_position.distance_to(shelf.global_position) <= 3.8:
+			var grip_pos: Vector3 = wrist.global_position
+			picked = shelf.pick_tote(selected_tier, grip_pos)
+
+		if picked.get("found", false):
+			has_gripped_box = true
+			_current_box_material = picked.get("material", null)
+			if gripped_box:
+				if _current_box_material:
+					gripped_box.material_override = _current_box_material
+				gripped_box.visible = true
+		else:
+			has_gripped_box = false
+	)
+
+	tween.tween_interval(0.2)
+	# 3. Retract back to aimed pose
+	tween.tween_property(shoulder, "rotation:x", base_shoulder, 0.35)
+	tween.parallel().tween_property(elbow, "rotation:x", base_elbow, 0.35)
+
+	tween.finished.connect(func():
+		_is_arm_tweening = false
+		if has_gripped_box:
+			arm_motion_state = ArmMotionState.GRIPPED
+			_arm_status_text = "📦 Box Gripped! Press [E] to stow in tray"
+		else:
+			arm_motion_state = ArmMotionState.AIMING_TIER
+			_arm_status_text = "⚠️ No box reached. [1-4] Tier | [E] Fold"
+		_update_dev_status_label()
+	)
+
+func stow_box_to_tray() -> void:
+	if _is_arm_tweening:
+		return
+	_is_arm_tweening = true
+	arm_motion_state = ArmMotionState.STOWING
+	_arm_status_text = "Stowing box into cargo tray..."
+	_update_dev_status_label()
+
+	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+
+	# 1. Swivel backwards 180 degrees towards rear tray
+	tween.tween_property(arm, "rotation:y", deg_to_rad(180.0), 0.45)
+	tween.parallel().tween_property(shoulder, "rotation:x", deg_to_rad(-45.0), 0.45)
+	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(75.0), 0.45)
+	tween.parallel().tween_property(wrist, "rotation:x", deg_to_rad(-30.0), 0.45)
+
+	# 2. Lower onto tray bed
+	tween.tween_property(shoulder, "rotation:x", deg_to_rad(-55.0), 0.25)
+	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(90.0), 0.25)
+
+	# 3. Release box to tray
+	tween.tween_callback(func():
+		if gripped_box:
+			gripped_box.visible = false
+		if tray_box:
+			if _current_box_material:
+				tray_box.material_override = _current_box_material
+			tray_box.visible = true
+		stowed_box_count += 1
+		has_gripped_box = false
+	)
+
+	tween.tween_interval(0.12)
+
+	# 4. Fold back to stationary home travel pose
 	tween.tween_property(arm, "rotation:y", 0.0, 0.4)
 	tween.parallel().tween_property(shoulder, "rotation:x", deg_to_rad(-25.0), 0.4)
 	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(45.0), 0.4)
+	tween.parallel().tween_property(wrist, "rotation:x", deg_to_rad(-20.0), 0.4)
 
 	tween.finished.connect(func():
-		_is_arm_animating = false
+		_is_arm_tweening = false
+		arm_motion_state = ArmMotionState.STATIONARY
 		set_amr_state(AmrState.IDLE)
+		_arm_status_text = "📦 Box Stowed! [WASD] Drive | [E] Pick again"
+		_update_dev_status_label()
+	)
+
+func return_arm_to_stationary() -> void:
+	if _is_arm_tweening:
+		return
+	_is_arm_tweening = true
+	_arm_status_text = "Folding arm to stationary..."
+	_update_dev_status_label()
+
+	var tween: Tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(arm, "rotation:y", 0.0, 0.35)
+	tween.parallel().tween_property(shoulder, "rotation:x", deg_to_rad(-25.0), 0.35)
+	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(45.0), 0.35)
+	tween.parallel().tween_property(wrist, "rotation:x", deg_to_rad(-20.0), 0.35)
+
+	tween.finished.connect(func():
+		_is_arm_tweening = false
+		arm_motion_state = ArmMotionState.STATIONARY
+		set_amr_state(AmrState.IDLE)
+		_arm_status_text = "[WASD] Drive | [E] Prep Arm"
+		_update_dev_status_label()
 	)
 
 func set_amr_state(new_state: AmrState) -> void:

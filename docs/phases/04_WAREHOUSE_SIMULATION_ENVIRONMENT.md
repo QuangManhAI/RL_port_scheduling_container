@@ -152,6 +152,33 @@ stateDiagram-v2
     CHARGING --> IDLE: Battery >= 95%
 ```
 
+### 4.3 Developer Manual Bot (`DEV-01`) Interactive Motion Sequence
+
+For manual environment testing and physical validation, `DEV-01` features an interactive arm state machine:
+
+```mermaid
+stateDiagram-v2
+    [*] --> STATIONARY: Folded Travel Pose
+    STATIONARY --> PREPARING: Press [E]
+    PREPARING --> AIMING_TIER: Press [1, 2, 3, or 4]
+    AIMING_TIER --> AIMING_TIER: Press [1-4] to change tier
+    AIMING_TIER --> STATIONARY: Press [E] (Cancel / No box)
+    AIMING_TIER --> PICKING: Press [F] (Reach & Grasp)
+    PICKING --> GRIPPED: Collision with box at Tier
+    PICKING --> AIMING_TIER: No box in range
+    GRIPPED --> STOWING: Press [E]
+    STOWING --> STATIONARY: Box placed in Tray & Arm folded
+```
+
+- **Motion Sequence Rules**:
+  1. **Stationary State**: Arm folded in home resting pose ($0^\circ$ yaw, folded boom and forearm). No box in hand. Differential driving active via `WASD` / Arrow keys.
+  2. **Prepare for Pickup (`E`)**: Swivels arm to face the nearest storage rack (detects Left vs. Right side via local transform projection). Elevates to ready posture.
+  3. **Select Rack Tier (`1`, `2`, `3`, `4`)**: Adjusts shoulder, elbow, and wrist joint pitch to align with the selected rack tier elevation (Tier 1: $0.62\,\text{m}$, Tier 2: $1.18\,\text{m}$, Tier 3: $1.74\,\text{m}$, Tier 4: $2.30\,\text{m}$). Camera presets are cleanly overridden so view does not jump.
+  4. **Pick Up Box (`F`)**: Arm extends into shelf bay. Detects physical/geometric collision with shelf tote at that tier. If present, removes box from rack and grasps it with gripper (`has_gripped_box = true`). If no box, retracts and prompts player.
+  5. **Stow to Tray / Fold (`E`)**:
+     - **If box is held**: Swivels $180^\circ$ towards rear cargo tray, lowers box onto tray bed, transfers tote box to tray, and folds arm back to stationary.
+     - **If no box is held**: Folds arm directly back to stationary resting pose.
+
 ---
 
 ## 5. Verification & Implementation Phases
@@ -164,6 +191,6 @@ stateDiagram-v2
    - Implement `amr_kinematics.py`: Differential drive kinematics, arm pick/stow sequences, battery model.
    - Implement `warehouse_env.py`: Gym-compatible step/reset loop with configurable time-scaling.
 3. **Step 3 (`godot/`)**:
-   - Update `amr_robot.tscn`: Add vertical mast, articulated picking arm, and 4-slot tote carrier deck.
-   - Implement arm animation blending (Up/Down tier lift, Left/Right reach, tote grasp).
-   - Implement interactive 3rd-person follow camera on AMR selection with auto-zoom on picking.
+   - Update `amr_robot.tscn`: Mobile Manipulator chassis, articulated 3-joint picking arm, rear cargo tray.
+   - Implement interactive Developer Manual Bot arm state machine (`E` prepare $\rightarrow$ `1-4` tier $\rightarrow$ `F` pick $\rightarrow$ `E` stow/fold).
+   - Implement interactive 3rd-person follow chase camera (`C`).

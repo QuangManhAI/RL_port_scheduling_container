@@ -57,17 +57,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		var key: InputEventKey = event as InputEventKey
 		if key.keycode == KEY_C:
 			toggle_follow_target()
-		elif key.keycode == KEY_1:
-			is_following = false
+		elif not is_following and key.keycode == KEY_1:
 			set_view_overview()
-		elif key.keycode == KEY_2:
-			is_following = false
+		elif not is_following and key.keycode == KEY_2:
 			set_view_topdown()
-		elif key.keycode == KEY_3:
-			is_following = false
+		elif not is_following and key.keycode == KEY_3:
 			set_view_pick_station()
-		elif key.keycode == KEY_4:
-			is_following = false
+		elif not is_following and key.keycode == KEY_4:
 			set_view_charging_dock()
 
 func _process(delta: float) -> void:
