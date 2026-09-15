@@ -57,3 +57,7 @@ logs/
 .env
 .env.*
 *.tar.gz
+
+# Godot 4
+.godot/
+godot/.godot/

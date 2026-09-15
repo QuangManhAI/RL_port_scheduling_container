@@ -198,10 +198,3 @@ func copy_logs_to_clipboard() -> void:
 
 	DisplayServer.clipboard_set(full_text)
 	log_event("[color=lime]📋 Logs copied to clipboard (%d entries)![/color]" % _raw_log_lines.size())
-
-func _on_auto_pressed() -> void:
-	is_auto_fleet = not is_auto_fleet
-	if btn_auto:
-		btn_auto.text = "Pause Cycle" if is_auto_fleet else "Auto In/Out"
-	auto_fleet_toggled.emit(is_auto_fleet)
-	log_event("[color=yellow]Continuous autonomous Inbound/Outbound cycle: %s[/color]" % str(is_auto_fleet))

@@ -28,9 +28,15 @@ const COLOR_CHARGING: Color = Color(0.1, 0.9, 0.4)     # Emerald (Charging)
 @export var linear_deceleration: float = 14.0
 @export var turn_speed: float = 3.2
 
-@onready var turntable: Node3D = $Chassis/ElevatingTurntable
-@onready var led_ring: MeshInstance3D = $Chassis/LedRing
-@onready var laser_plane: MeshInstance3D = $Chassis/LidarTurret/LaserScanPlane
+@onready var arm: Node3D = $RoboticArm
+@onready var shoulder: Node3D = $RoboticArm/ShoulderJoint
+@onready var elbow: Node3D = $RoboticArm/ShoulderJoint/ElbowJoint
+@onready var wrist: Node3D = $RoboticArm/ShoulderJoint/ElbowJoint/WristJoint
+@onready var gripped_box: MeshInstance3D = $RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/GrippedBox
+@onready var cargo_tray: Node3D = $Chassis/CargoTray
+@onready var tray_box: MeshInstance3D = $Chassis/CargoTray/TrayBox1
+@onready var side_strip_left: MeshInstance3D = $Chassis/SideLedStripLeft
+@onready var side_strip_right: MeshInstance3D = $Chassis/SideLedStripRight
 @onready var label_status: Label3D = $StatusBadge
 
 var current_state: AmrState = AmrState.IDLE
@@ -38,28 +44,20 @@ var carried_pod: ShelfPod = null
 var current_speed: float = 0.0
 var _manual_linear_vel: float = 0.0
 var _led_material: StandardMaterial3D
-var _laser_material: StandardMaterial3D
+var _is_arm_animating: bool = false
+var _last_arm_trigger_time: int = 0
 
 func _ready() -> void:
-	if led_ring:
-		_led_material = StandardMaterial3D.new()
-		_led_material.roughness = 0.2
-		_led_material.emission_enabled = true
-		led_ring.set_surface_override_material(0, _led_material)
-	if laser_plane:
-		_laser_material = StandardMaterial3D.new()
-		_laser_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		_laser_material.albedo_color = Color(0.0, 0.9, 1.0, 0.18)
-		_laser_material.emission_enabled = true
-		_laser_material.emission = Color(0.0, 0.9, 1.0, 1.0)
-		_laser_material.emission_energy_multiplier = 1.5
-		laser_plane.set_surface_override_material(0, _laser_material)
+	_led_material = StandardMaterial3D.new()
+	_led_material.roughness = 0.2
+	_led_material.emission_enabled = true
+	if side_strip_left:
+		side_strip_left.set_surface_override_material(0, _led_material)
+	if side_strip_right:
+		side_strip_right.set_surface_override_material(0, _led_material)
 
 	set_amr_state(AmrState.IDLE)
 
-func _process(delta: float) -> void:
-	if laser_plane:
-		laser_plane.rotate_y(delta * 8.0)
 
 func _physics_process(delta: float) -> void:
 	if is_manual_control:
@@ -109,11 +107,51 @@ func _process_manual_driving(delta: float) -> void:
 	global_position.x = clamp(global_position.x, -33.0, 33.0)
 	global_position.z = clamp(global_position.z, -35.0, 32.0)
 
+	# Arm reach triggers (E: Reach Right, Q: Reach Left)
+	var now: int = Time.get_ticks_msec()
+	if now - _last_arm_trigger_time > 1600 and not _is_arm_animating:
+		if Input.is_key_pressed(KEY_E):
+			_last_arm_trigger_time = now
+			animate_arm_reach(1.0)
+		elif Input.is_key_pressed(KEY_Q):
+			_last_arm_trigger_time = now
+			animate_arm_reach(-1.0)
+
 	current_speed = abs(_manual_linear_vel)
 	current_task_str = "MANUAL PILOT"
 
 	if label_status:
-		label_status.text = "%s [DEV BOT]\n⚡ %.0f%% | %.1f m/s" % [robot_id, battery_level, current_speed]
+		label_status.text = "%s [DEV BOT]\n⚡ %.0f%% | %.1f m/s\n[E/Q] Arm Pick" % [robot_id, battery_level, current_speed]
+
+func animate_arm_reach(side: float = 1.0) -> void:
+	if _is_arm_animating:
+		return
+	_is_arm_animating = true
+	set_amr_state(AmrState.LIFTING)
+
+	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	# 1. Swivel turret to shelf side and reach out
+	tween.tween_property(arm, "rotation:y", deg_to_rad(85.0 * side), 0.45)
+	tween.parallel().tween_property(shoulder, "rotation:x", deg_to_rad(-10.0), 0.45)
+	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(60.0), 0.45)
+	
+	# 2. Grip dwell
+	tween.tween_interval(0.3)
+	
+	# 3. Retract back towards onboard cargo tray
+	tween.tween_property(arm, "rotation:y", deg_to_rad(180.0), 0.5)
+	tween.parallel().tween_property(shoulder, "rotation:x", deg_to_rad(-45.0), 0.5)
+	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(85.0), 0.5)
+
+	# 4. Return to home forward travel pose
+	tween.tween_property(arm, "rotation:y", 0.0, 0.4)
+	tween.parallel().tween_property(shoulder, "rotation:x", deg_to_rad(-25.0), 0.4)
+	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(45.0), 0.4)
+
+	tween.finished.connect(func():
+		_is_arm_animating = false
+		set_amr_state(AmrState.IDLE)
+	)
 
 func set_amr_state(new_state: AmrState) -> void:
 	current_state = new_state
@@ -153,9 +191,6 @@ func set_amr_state(new_state: AmrState) -> void:
 		_led_material.emission = state_color
 		_led_material.emission_energy_multiplier = 3.5
 
-	if _laser_material:
-		_laser_material.emission = state_color
-
 	if label_status:
 		label_status.text = "%s [%s]\n⚡ %.0f%% | %.1f m/s" % [robot_id, state_text, battery_level, current_speed]
 		label_status.modulate = Color(1.0, 1.0, 1.0, 1.0)
@@ -186,7 +221,8 @@ func yield_at_intersection(wait_seconds: float = 1.2) -> Tween:
 func dock_and_lift_pod(pod: ShelfPod) -> Tween:
 	set_amr_state(AmrState.LIFTING)
 	carried_pod = pod
-	var tween: Tween = pod.lift_by_amr(turntable)
+	var attach_target = cargo_tray if cargo_tray else self
+	var tween: Tween = pod.lift_by_amr(attach_target)
 	tween.finished.connect(func(): set_amr_state(AmrState.MOVING))
 	return tween
 
