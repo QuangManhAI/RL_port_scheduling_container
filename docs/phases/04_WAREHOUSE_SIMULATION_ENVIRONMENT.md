@@ -196,39 +196,38 @@ To provide tactile, responsive operator feedback without project bloat (<300 KB 
 
 ---
 
-### 4.5 Physical Collision Architecture & Gravity Dynamics
+### 4.5 Physical Collision Architecture & Dynamic Toppleable Racks
 
-To ground the simulation in realistic mechanics suitable for reinforcement learning:
+In the **Environment Building Sector**, all physical interactions are grounded in dynamic 3D rigid-body and kinematic collision physics:
 
 ```mermaid
 graph TD
-    subgraph Godot Physics Architecture
-        Floor["Warehouse Floor & Walls (StaticBody3D)<br>Layer 1: Static Environment"]
-        Racks["32 Storage Pod Racks (StaticBody3D)<br>Layer 2: Obstacles / Racks"]
-        AMR["AMRs: DEV-01 & Fleet (CharacterBody3D)<br>Layer 3: Fleet (move_and_slide)"]
-        Totes["SKU Tote Boxes (RigidBody3D / Area3D)<br>Layer 4: Cargo Totes"]
-        LiDAR["Virtual 2D LiDAR (16-Ray RayCast3D)<br>Layer 6: Sensor Raycasts"]
+    subgraph Godot Physical Simulation
+        Floor["Warehouse Floor & Walls (StaticBody3D)<br>Layer 1: Static Environment & Boundaries"]
+        Racks["32 Storage Pod Racks (RigidBody3D, m=280kg)<br>Layer 2: Dynamic Racks (Can Topple & Fall!)"]
+        AMR["AMRs: DEV-01 & Fleet (CharacterBody3D, m=150kg)<br>Layer 3: Fleet (move_and_slide)"]
+        Audio["SoundManager Acoustics<br>Impact thuds & crash cues"]
     end
 
-    AMR -->|Collides & Bounces| Racks
-    AMR -->|Collides & Stops| Floor
-    AMR -->|Mutual Fleet Collision| AMR
-    LiDAR -->|Detects Distance| Racks
-    LiDAR -->|Detects Distance| AMR
-    Totes -->|Rests Under Gravity| AMR
+    AMR -->|Gravity -9.81 m/s²| Floor
+    Racks -->|Gravity -9.81 m/s² & Friction| Floor
+    AMR -->|Low Speed Brush: Friction Nudge| Racks
+    AMR -->|High Speed Ram: Overturning Moment -> Topple!| Racks
+    AMR -->|Crash Impulse Triggers Audio| Audio
 ```
 
 - **Collision Layers & Masks**:
-  - **Layer 1 (`Environment_Static`)**: Ground floor ($70 \times 70\,\text{m}$) and perimeter boundary walls. Supports downward gravity $\vec{g} = (0, -9.81, 0)\,\text{m/s}^2$.
-  - **Layer 2 (`Racks_Obstacles`)**: 32 stationary storage pods with compound upright corner colliders.
-  - **Layer 3 (`AMR_Fleet`)**: All AMRs upgraded from kinematic translation to `CharacterBody3D` with `move_and_slide()`. Enables realistic friction, inertia, and elastic bumper recoil upon striking racks or other AMRs.
-  - **Layer 4 (`Payload_Totes`)**: Small tote boxes ($4.5\,\text{kg}$) subject to gravity and tray boundary rails.
-  - **Layer 5 (`Arm_Gripper`)**: Articulated arm collision volume to prevent clipping through rack steel beams.
-  - **Layer 6 (`Sensors_LiDAR`)**: 16 horizontal raycasts ($360^\circ$ radial coverage) detecting obstacles for the RL agent.
+  - **Layer 1 (`Environment_Static`)**: Ground floor ($140 \times 100\,\text{m}$) and 4 boundary perimeter walls. Supports downward gravity $\vec{g} = (0, -9.81, 0)\,\text{m/s}^2$.
+  - **Layer 2 (`Racks_Dynamic`)**: 32 storage pods upgraded to **`RigidBody3D` ($m = 280\,\text{kg}$)** with custom center of mass ($y = 0.85\,\text{m}$). Racks stand firmly under normal conditions, but an AMR ramming at speed transfers momentum and creates an overturning moment, causing the rack to realistically tilt, wobble, and topple over!
+  - **Layer 3 (`AMR_Fleet`)**: AMRs upgraded to **`CharacterBody3D` with `move_and_slide()`**. Bumper collisions transfer kinetic impulse to `RigidBody3D` colliders and trigger crash SFX.
+  - **Layer 4 (`Payload_Totes`)**: Small tote boxes subject to gravity and tray boundary rails.
+  - **Layer 5 (`Arm_Gripper`)**: Articulated arm collision volume.
+  - **Layer 6 (`Sensors_LiDAR`)**: 16 horizontal raycasts detecting obstacles.
 
-- **Tote Box Retention & Centripetal Stability**:
-  - Rear cargo tray includes physical recessed bed and guardrails ($h = 0.08\,\text{m}$).
-  - Lateral centripetal acceleration monitor: $a_{centripetal} = v \cdot \omega$. If $|a_{centripetal}| > 2.8\,\text{m/s}^2$ (jerky turning at high velocity), a **Load Instability Penalty** is triggered in RL.
+- **Topple Mechanics & Overturning Momentum**:
+  - At low velocities ($v < 1.2\,\text{m/s}$), contact transfers minimal impulse; the rack's low center of mass restores upright equilibrium.
+  - At high velocities ($v > 2.5\,\text{m/s}$), bumper impact at $y = 0.2\,\text{m}$ exerts torque about the base exceeding the stability threshold ($\approx 28^\circ$), sending the rack crashing onto the concrete floor.
+  - When toppled (`basis.y.dot(UP) < 0.7`), the rack status updates to `[COLLAPSED / DAMAGED]`.
 
 ### 4.6 RL Observation, Action & Reward Foundations
 
