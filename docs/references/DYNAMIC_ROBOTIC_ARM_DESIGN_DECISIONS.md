@@ -59,6 +59,7 @@ In 3D physics engines running at $\Delta t = \frac{1}{60}\,\text{s}$, when an Au
 - **Joint 2 (`ElbowPitch`)**: Forearm reach link ($L_2 = 0.86\,\text{m}$).
 - **Joint 3 (`WristPitch`)**: End-effector leveling & pitch orientation ($L_3 = 0.25\,\text{m}$).
 - **Kinematic Reach Envelope**: $R_{min} = 0.20\,\text{m}$, $R_{max} = 2.15\,\text{m}$. Enables comfortable access from Tier 1 ($h = 0.56\,\text{m}$) all the way up to Tier 4 ($h = 2.23\,\text{m}$) and floor level ($h = 0.16\,\text{m}$) from typical aisle stand-off distances ($0.6\,\text{m} - 1.0\,\text{m}$).
+- **Compact Rest Pose**: Inactive arm folds down along the chassis deck ($Y_{\max} \approx 1.03\,\text{m}$, shoulder $-68^\circ$, elbow $140^\circ$, wrist $-72^\circ$, closed fingers) instead of sticking up into the sky ($2.18\,\text{m}$). Incorporates organic $0.24\,\text{Hz}$ hydraulic breathing oscillation and vehicle acceleration suspension compliance.
 
 ### Selected Approach: Analytical Closed-Form Two-Bone IK with Ground-Parallel Wrist
 - Resolves target in planar arm coordinate frame $(r, y)$ where $r = \sqrt{x^2 + z^2}$.
@@ -85,17 +86,17 @@ Reaching directly toward a box in a single diagonal path risks colliding with lo
 ### Selected Approach: Interactive 3D Click & Proximity Hybrid with ESC Cancel
 - **Method 1 (Mouse Raycast)**: The operator clicks on any `ToteBox` in the 3D viewport (whether on a rack tier or resting on the floor). A holographic targeting reticle highlights the selected box.
 - **Method 2 (Proximity Auto-Target)**: If no box is clicked, pressing `[E]` casts a forward-facing sensor cone ($\pm 60^\circ, R \le 2.15\,\text{m}$) from the AMR shoulder, automatically selecting the closest valid box.
-- **Method 3 (Quick Cancel via `[ESC]`)**: Pressing `[ESC]` immediately deselects active target, hides the reticle, and smoothly tweens the manipulator back to its compact travel pose.
+- **Method 3 (Quick Cancel via `[ESC]`)**: Pressing `[ESC]` immediately deselects active target, hides the reticle, and smoothly tweens the manipulator back to its compact rest pose.
 
 ---
 
 ## 6. Branch 5: Cargo Tray Retention & Physical Sensors
 
-### Selected Approach: Multi-Slot Tray with Area3D Sensors & Parent Lock
+### Selected Approach: Multi-Slot Tray with Dynamic Compliance & Physical Area3D Sensors
 - **Payload Capacity**: 2 independent payload slots (Slot 1: Front $Z = -0.22$, Slot 2: Rear $Z = +0.22$).
 - **Physical Sensor Detection (`Area3D`)**: Real-time payload presence is verified by discrete `Slot1Sensor` and `Slot2Sensor` collision areas ($0.50 \times 0.28 \times 0.32\,\text{m}$) checking for overlapping `ToteBox` instances. If a box spills or falls out, the tray counter immediately reflects reality (0/2 or 1/2) rather than tracking keypresses.
-- **Zero-Floating Transit Parenting**: Stowed totes are parented to `CargoTray` with `freeze = true`, completely eliminating engine gravity sleeping float, physics jitter, and coordinate lag during high-speed AMR maneuvers.
-- **Dynamic Crash Ejection**: In high-speed collisions ($v > 2.2\,\text{m/s}$), stowed cargo is unparented to the world root, unfrozen, and hurled outward with directional kinetic impulse.
+- **Dynamic Micro-Compliance & Inertia**: Stowed totes are parented to `CargoTray` with physical compliance: under acceleration and braking, boxes slide $\pm 1.8\,\text{cm}$ and pitch $\pm 2^\circ$ within tray retention rails; under turning, boxes roll $\pm 1.4^\circ$; during driving, boxes subtly vibrate with travel. Eliminates both the unnatural frozen-solid look and mid-air floating bugs.
+- **Natural Crash Momentum Transfer**: In high-speed collisions ($v > 1.9\,\text{m/s}$), stowed cargo is unparented to the world root with vehicle forward momentum ($\vec{v}_{\text{box}} \approx \vec{v}_{\text{amr}} \times 0.85 + (0, 0.35, 0)$), tumbling naturally forward over the bumper onto the floor under real gravity. Avoids unrealistic rocket-booster impulses.
 
 ---
 

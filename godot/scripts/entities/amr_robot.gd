@@ -62,11 +62,22 @@ const COLOR_CHARGING: Color = Color(0.1, 0.9, 0.4)     # Emerald (Charging)
 @onready var reticle_ring: MeshInstance3D = $TargetReticle/ReticleRing
 @onready var label_status: Label3D = $StatusBadge
 
+# Compact Folded Rest Pose Constants
+const REST_ARM_YAW: float = 0.0
+const REST_SHOULDER_PITCH: float = -1.18682  # deg_to_rad(-68.0): folded forward-down along chassis
+const REST_ELBOW_PITCH: float = 2.44346      # deg_to_rad(140.0): folded tightly back above boom
+const REST_WRIST_PITCH: float = -1.25664     # deg_to_rad(-72.0): gripper level and tucked
+const REST_FINGER_SPAN: float = 0.16         # Neatly closed parking width
+
 var current_state: AmrState = AmrState.IDLE
 var arm_motion_state: ArmMotionState = ArmMotionState.STATIONARY
 var carried_pod: ShelfPod = null
 var current_speed: float = 0.0
 var _manual_linear_vel: float = 0.0
+var _prev_linear_vel: float = 0.0
+var _chassis_accel: float = 0.0
+var _arm_idle_time: float = 0.0
+var _drive_vib_time: float = 0.0
 var _led_material: StandardMaterial3D
 var _reticle_material: StandardMaterial3D
 
@@ -205,13 +216,13 @@ func cancel_arm_to_stationary() -> void:
 	if held_box == null:
 		SoundManager.play_spatial(self, SoundManager.sfx_cancel, -2.0)
 		_is_arm_tweening = true
-		var tween: Tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		tween.tween_property(arm, "rotation:y", 0.0, 0.28)
-		tween.parallel().tween_property(shoulder, "rotation:x", deg_to_rad(-25.0), 0.28)
-		tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(45.0), 0.28)
-		tween.parallel().tween_property(wrist, "rotation:x", deg_to_rad(-20.0), 0.28)
-		if finger_left: tween.parallel().tween_property(finger_left, "position:x", -0.30, 0.25)
-		if finger_right: tween.parallel().tween_property(finger_right, "position:x", 0.30, 0.25)
+		var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tween.tween_property(arm, "rotation:y", REST_ARM_YAW, 0.35)
+		tween.parallel().tween_property(shoulder, "rotation:x", REST_SHOULDER_PITCH, 0.35)
+		tween.parallel().tween_property(elbow, "rotation:x", REST_ELBOW_PITCH, 0.35)
+		tween.parallel().tween_property(wrist, "rotation:x", REST_WRIST_PITCH, 0.35)
+		if finger_left: tween.parallel().tween_property(finger_left, "position:x", -REST_FINGER_SPAN, 0.30)
+		if finger_right: tween.parallel().tween_property(finger_right, "position:x", REST_FINGER_SPAN, 0.30)
 		tween.finished.connect(func():
 			_is_arm_tweening = false
 			arm_motion_state = ArmMotionState.STATIONARY
@@ -465,14 +476,14 @@ func execute_dynamic_stow() -> void:
 			SoundManager.play_spatial(self, SoundManager.sfx_box_stow, +1.0)
 	)
 
-	# 4. Retract and fold arm back to compact travel pose
+	# 4. Retract and fold arm back to compact rest pose
 	tween.tween_interval(0.10)
-	tween.tween_property(arm, "rotation:y", 0.0, 0.38)
-	tween.parallel().tween_property(shoulder, "rotation:x", deg_to_rad(-25.0), 0.38)
-	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(45.0), 0.38)
-	tween.parallel().tween_property(wrist, "rotation:x", deg_to_rad(-20.0), 0.38)
-	if finger_left: tween.parallel().tween_property(finger_left, "position:x", -0.30, 0.30)
-	if finger_right: tween.parallel().tween_property(finger_right, "position:x", 0.30, 0.30)
+	tween.tween_property(arm, "rotation:y", REST_ARM_YAW, 0.38)
+	tween.parallel().tween_property(shoulder, "rotation:x", REST_SHOULDER_PITCH, 0.38)
+	tween.parallel().tween_property(elbow, "rotation:x", REST_ELBOW_PITCH, 0.38)
+	tween.parallel().tween_property(wrist, "rotation:x", REST_WRIST_PITCH, 0.38)
+	if finger_left: tween.parallel().tween_property(finger_left, "position:x", -REST_FINGER_SPAN, 0.30)
+	if finger_right: tween.parallel().tween_property(finger_right, "position:x", REST_FINGER_SPAN, 0.30)
 
 	tween.finished.connect(func():
 		_is_arm_tweening = false
@@ -533,14 +544,14 @@ func execute_dynamic_place() -> void:
 			SoundManager.play_spatial(self, SoundManager.sfx_box_stow, 0.0)
 	)
 
-	# 4. Fold home
+	# 4. Fold home to compact rest pose
 	tween.tween_interval(0.10)
-	tween.tween_property(arm, "rotation:y", 0.0, 0.35)
-	tween.parallel().tween_property(shoulder, "rotation:x", deg_to_rad(-25.0), 0.35)
-	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(45.0), 0.35)
-	tween.parallel().tween_property(wrist, "rotation:x", deg_to_rad(-20.0), 0.35)
-	if finger_left: tween.parallel().tween_property(finger_left, "position:x", -0.30, 0.30)
-	if finger_right: tween.parallel().tween_property(finger_right, "position:x", 0.30, 0.30)
+	tween.tween_property(arm, "rotation:y", REST_ARM_YAW, 0.35)
+	tween.parallel().tween_property(shoulder, "rotation:x", REST_SHOULDER_PITCH, 0.35)
+	tween.parallel().tween_property(elbow, "rotation:x", REST_ELBOW_PITCH, 0.35)
+	tween.parallel().tween_property(wrist, "rotation:x", REST_WRIST_PITCH, 0.35)
+	if finger_left: tween.parallel().tween_property(finger_left, "position:x", -REST_FINGER_SPAN, 0.30)
+	if finger_right: tween.parallel().tween_property(finger_right, "position:x", REST_FINGER_SPAN, 0.30)
 
 	tween.finished.connect(func():
 		_is_arm_tweening = false
@@ -551,12 +562,12 @@ func execute_dynamic_place() -> void:
 	)
 
 func _fold_arm_to_home_instant() -> void:
-	if arm: arm.rotation.y = 0.0
-	if shoulder: shoulder.rotation.x = deg_to_rad(-25.0)
-	if elbow: elbow.rotation.x = deg_to_rad(45.0)
-	if wrist: wrist.rotation.x = deg_to_rad(-20.0)
-	if finger_left: finger_left.position.x = -0.30
-	if finger_right: finger_right.position.x = 0.30
+	if arm: arm.rotation.y = REST_ARM_YAW
+	if shoulder: shoulder.rotation.x = REST_SHOULDER_PITCH
+	if elbow: elbow.rotation.x = REST_ELBOW_PITCH
+	if wrist: wrist.rotation.x = REST_WRIST_PITCH
+	if finger_left: finger_left.position.x = -REST_FINGER_SPAN
+	if finger_right: finger_right.position.x = REST_FINGER_SPAN
 
 func _physics_process(delta: float) -> void:
 	if is_manual_control:
@@ -565,6 +576,63 @@ func _physics_process(delta: float) -> void:
 		if not is_on_floor():
 			velocity.y -= 9.81 * delta
 			move_and_slide()
+
+	_update_inactive_arm_animation(delta)
+	_update_stowed_cargo_dynamics(delta)
+
+## Dynamic Idle Breathing and Suspension Compliance for Inactive Resting Arm
+func _update_inactive_arm_animation(delta: float) -> void:
+	if arm_motion_state != ArmMotionState.STATIONARY or _is_arm_tweening:
+		return
+
+	_arm_idle_time += delta
+	# Gentle mechanical breathing oscillation (0.24 Hz)
+	var idle_sway: float = sin(_arm_idle_time * 1.5) * deg_to_rad(0.55)
+	# Subtle inertial pitch reacting to chassis acceleration/braking
+	var inertial_pitch: float = clampf(-_chassis_accel * 0.002, -deg_to_rad(1.8), deg_to_rad(1.8))
+
+	if shoulder:
+		shoulder.rotation.x = move_toward(shoulder.rotation.x, REST_SHOULDER_PITCH + idle_sway + inertial_pitch, 1.2 * delta)
+	if elbow:
+		elbow.rotation.x = move_toward(elbow.rotation.x, REST_ELBOW_PITCH - idle_sway * 0.5, 1.2 * delta)
+	if wrist:
+		wrist.rotation.x = move_toward(wrist.rotation.x, REST_WRIST_PITCH, 1.2 * delta)
+	if arm:
+		arm.rotation.y = move_toward(arm.rotation.y, REST_ARM_YAW, 2.0 * delta)
+	if finger_left:
+		finger_left.position.x = move_toward(finger_left.position.x, -REST_FINGER_SPAN, 0.8 * delta)
+	if finger_right:
+		finger_right.position.x = move_toward(finger_right.position.x, REST_FINGER_SPAN, 0.8 * delta)
+
+## Natural Physical Micro-Inertia & Compliance for Stowed Cargo in Tray
+func _update_stowed_cargo_dynamics(delta: float) -> void:
+	_chassis_accel = (_manual_linear_vel - _prev_linear_vel) / maxf(delta, 0.001)
+	_prev_linear_vel = _manual_linear_vel
+
+	if abs(_manual_linear_vel) > 0.05:
+		_drive_vib_time += delta * (14.0 + abs(_manual_linear_vel) * 2.0)
+	else:
+		_drive_vib_time = 0.0
+
+	# Road/floor travel micro-vibration
+	var vib_y: float = sin(_drive_vib_time) * 0.0012 * clampf(abs(_manual_linear_vel) / max_speed, 0.0, 1.0)
+	# Inertial forward/backward shift inside the tray bed (-1.8cm to +1.8cm)
+	var inertial_z: float = clampf(-_chassis_accel * 0.0014, -0.018, 0.018)
+	# Subtle pitch compliance on acceleration and braking
+	var inertial_pitch: float = clampf(-_chassis_accel * 0.0035, -deg_to_rad(2.0), deg_to_rad(2.0))
+	# Subtle roll compliance on turns
+	var turn_rate: float = Input.get_axis("ui_right", "ui_left") if is_manual_control else 0.0
+	var roll_angle: float = clampf(turn_rate * deg_to_rad(1.4), -deg_to_rad(1.4), deg_to_rad(1.4))
+
+	for slot_idx in [0, 1]:
+		var marker: Marker3D = slot_1_marker if slot_idx == 0 else slot_2_marker
+		if not marker: continue
+		var box: ToteBox = get_slot_box(slot_idx)
+		if box and is_instance_valid(box) and box.get_parent() == cargo_tray:
+			var target_pos: Vector3 = marker.position + Vector3(0.0, vib_y, inertial_z)
+			var target_rot: Vector3 = Vector3(inertial_pitch, 0.0, roll_angle)
+			box.position = box.position.lerp(target_pos, 10.0 * delta)
+			box.rotation = box.rotation.lerp(target_rot, 10.0 * delta)
 
 func _process_manual_driving(delta: float) -> void:
 	var move_input: float = 0.0
@@ -637,10 +705,10 @@ func _process_manual_driving(delta: float) -> void:
 				var impulse_mag: float = impact_speed * 2000.0 + 400.0
 				collider.apply_impulse(impulse_dir * impulse_mag * delta, contact_offset)
 
-			if impact_speed > 2.2:
-				_manual_linear_vel = move_toward(_manual_linear_vel, 0.0, 10.0 * delta)
+			# Severe crash: boxes realistically tumble forward out of the tray onto floor
+			if impact_speed > 1.9:
+				_manual_linear_vel = move_toward(_manual_linear_vel, 0.0, 12.0 * delta)
 
-				# Severe crash: spill stowed cargo out of the tray onto the floor!
 				for slot_idx in [0, 1]:
 					var s_box = get_slot_box(slot_idx)
 					if s_box and is_instance_valid(s_box) and s_box.get_parent() == cargo_tray:
@@ -650,8 +718,12 @@ func _process_manual_driving(delta: float) -> void:
 						s_box.global_transform = s_world_tform
 						s_box.freeze = false
 						s_box.sleeping = false
-						var spill_dir = (impulse_dir + Vector3(randf_range(-0.4, 0.4), 0.5, randf_range(-0.4, 0.4))).normalized()
-						s_box.apply_impulse(spill_dir * (impact_speed * 30.0 + 20.0))
+						PhysicsServer3D.body_set_state(s_box.get_rid(), PhysicsServer3D.BODY_STATE_SLEEPING, false)
+
+						# Forward momentum transfer: carries vehicle speed over the tray lip
+						var spill_vel: Vector3 = forward_vec * (impact_speed * 0.85) + Vector3(0.0, 0.35, 0.0) + impulse_dir * 0.2
+						s_box.linear_velocity = spill_vel
+						s_box.angular_velocity = Vector3(randf_range(1.5, 3.0), randf_range(-0.5, 0.5), randf_range(-0.5, 0.5))
 
 	global_position.x = clamp(global_position.x, -40.0, 40.0)
 	global_position.z = clamp(global_position.z, -40.0, 40.0)

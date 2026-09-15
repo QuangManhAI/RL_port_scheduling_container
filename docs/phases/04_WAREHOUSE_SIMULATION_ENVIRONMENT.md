@@ -177,10 +177,11 @@ stateDiagram-v2
   - `Mouse Left Click`: Casts 3D raycast from viewport camera to select any `ToteBox` (on rack shelf or floor).
   - `[E] Key`: Targets nearest box (if none selected) and triggers 3-stage dynamic pick; if holding box, stows to first available cargo tray slot.
   - `[G] Key`: Dynamically places held box onto the floor in front of the robot.
-  - `[Esc] Key`: Quick-cancels active targeting/pick state and smoothly returns the arm to stationary travel pose.
+  - `[Esc] Key`: Quick-cancels active targeting/pick state and smoothly returns the arm to compact resting pose.
+  - `Compact Folded Rest Pose & Idle Breathing`: When inactive, the arm folds down low along the chassis deck ($Y_{\max} \approx 1.03\,\text{m}$, shoulder $-68^\circ$, elbow $140^\circ$, wrist $-72^\circ$, neatly closed fingers). Implements organic $0.24\,\text{Hz}$ hydraulic breathing sway and chassis inertial suspension compliance.
   - `Targeting Reticle`: Real-time holographic ring (Cyan when in reach $\le 2.15\,\text{m}$, Red when out of reach). Target distance is measured strictly from the shoulder joint.
   - `Extended Reach Envelope`: $L_1 = 1.02\,\text{m}, L_2 = 0.86\,\text{m}, L_3 = 0.25\,\text{m}, R_{max} = 2.15\,\text{m}$, mounted on a $0.2\,\text{m}$ pedestal mast ($Y = 0.56\,\text{m}$ world shoulder height) to reach all 4 rack tiers ($h = 0.56, 1.11, 1.67, 2.23\,\text{m}$).
-  - `Dual-Slot Physical Tray with Area3D Sensors`: Slot 1 (Front $Z = -0.22$) and Slot 2 (Rear $Z = +0.22$) equipped with physical `Area3D` sensors for real-time payload detection (dropping to 0 if boxes spill in a collision), zero-floating transit lock, and dynamic crash ejection.
+  - `Dual-Slot Physical Tray with Dynamic Compliance & Sensors`: Slot 1 (Front $Z = -0.22$) and Slot 2 (Rear $Z = +0.22$) equipped with physical `Area3D` sensors. Stowed boxes exhibit realistic inertial compliance (sliding $\pm 1.8\,\text{cm}$, pitching $\pm 2^\circ$, and vibrating with road travel) rather than remaining frozen solid. On high-speed impacts ($v > 1.9\,\text{m/s}$), boxes realistically tumble forward onto the floor carrying forward momentum under gravity.
   - See [`DYNAMIC_ROBOTIC_ARM_DESIGN_DECISIONS.md`](../references/DYNAMIC_ROBOTIC_ARM_DESIGN_DECISIONS.md) for architectural trade-off evaluations.
 ### 4.3 Audio Design & Sound Effects Mapping
 
