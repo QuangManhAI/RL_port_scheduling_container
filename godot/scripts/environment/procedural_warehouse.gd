@@ -6,7 +6,7 @@ extends Node3D
 ## Zone B: Electronics & High-Tech (Emerald)
 ## Zone C: Pharmaceuticals & Sensitive (Purple)
 ## Zone D: Heavy Bulky Pallet Stacks (Amber)
-## Generates 32 dynamic toppleable ShelfPods and 256 physical ToteBoxes across 4 vertical tiers.
+## Generates 32 hollow physical ShelfPods and 256 physical ToteBoxes resting on shelf plates.
 
 @export var pod_scene: PackedScene = preload("res://scenes/environment/shelf_pod.tscn")
 @export var tote_scene: PackedScene = preload("res://scenes/environment/tote_box.tscn")
@@ -47,14 +47,14 @@ const ZONE_CONFIGS: Array[Dictionary] = [
 ]
 
 const TOTE_SLOT_DEFS: Array[Dictionary] = [
-	{"tier": 1, "side": "L", "offset": Vector3(-0.38, 0.62, 0.0)},
-	{"tier": 1, "side": "R", "offset": Vector3(0.38, 0.62, 0.0)},
-	{"tier": 2, "side": "L", "offset": Vector3(-0.38, 1.18, 0.0)},
-	{"tier": 2, "side": "R", "offset": Vector3(0.38, 1.18, 0.0)},
-	{"tier": 3, "side": "L", "offset": Vector3(-0.38, 1.74, 0.0)},
-	{"tier": 3, "side": "R", "offset": Vector3(0.38, 1.74, 0.0)},
-	{"tier": 4, "side": "L", "offset": Vector3(-0.38, 2.30, 0.0)},
-	{"tier": 4, "side": "R", "offset": Vector3(0.38, 2.30, 0.0)},
+	{"tier": 1, "side": "L", "offset": Vector3(-0.36, 0.56, 0.0)},
+	{"tier": 1, "side": "R", "offset": Vector3(0.36, 0.56, 0.0)},
+	{"tier": 2, "side": "L", "offset": Vector3(-0.36, 1.11, 0.0)},
+	{"tier": 2, "side": "R", "offset": Vector3(0.36, 1.11, 0.0)},
+	{"tier": 3, "side": "L", "offset": Vector3(-0.36, 1.67, 0.0)},
+	{"tier": 3, "side": "R", "offset": Vector3(0.36, 1.67, 0.0)},
+	{"tier": 4, "side": "L", "offset": Vector3(-0.36, 2.23, 0.0)},
+	{"tier": 4, "side": "R", "offset": Vector3(0.36, 2.23, 0.0)},
 ]
 
 var _pods: Dictionary = {}
@@ -126,7 +126,7 @@ func spawn_pod(p_id: int, pos: Vector3, z_name: String, z_cat: String, z_col: Co
 	instance.setup(p_id, z_name, z_cat, z_col, pos)
 	_pods[p_id] = instance
 
-	# Spawn 8 physical ToteBox instances docked to this rack
+	# Spawn 8 physical ToteBox instances resting on the shelf plates of this rack
 	for s_def in TOTE_SLOT_DEFS:
 		var tier_idx: int = s_def["tier"]
 		var side_str: String = s_def["side"]

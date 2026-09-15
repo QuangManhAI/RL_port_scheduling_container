@@ -1,4 +1,4 @@
-[gd_scene load_steps=6 format=3 uid="uid://dmx3shelf003"]
+[gd_scene load_steps=7 format=3 uid="uid://dmx3shelf003"]
 
 [ext_resource type="Script" path="res://scripts/environment/shelf_pod.gd" id="1_script"]
 
@@ -15,22 +15,53 @@ size = Vector3(0.08, 2.8, 0.08)
 material = SubResource("StandardMaterial3D_metal_frame")
 size = Vector3(1.6, 0.05, 1.6)
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_rack"]
-size = Vector3(1.58, 2.78, 1.58)
+[sub_resource type="BoxShape3D" id="BoxShape3D_leg"]
+size = Vector3(0.1, 2.8, 0.1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_shelf_plate"]
+size = Vector3(1.6, 0.05, 1.6)
 
 [node name="ShelfPod" type="RigidBody3D"]
 collision_layer = 2
-collision_mask = 7
+collision_mask = 15
 mass = 280.0
 center_of_mass_mode = 1
-center_of_mass = Vector3(0, 0.85, 0)
+center_of_mass = Vector3(0, 0.75, 0)
 linear_damp = 1.0
 angular_damp = 1.5
 script = ExtResource("1_script")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.39, 0)
-shape = SubResource("BoxShape3D_rack")
+[node name="ColLegFL" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 1.4, -0.75)
+shape = SubResource("BoxShape3D_leg")
+
+[node name="ColLegFR" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 1.4, -0.75)
+shape = SubResource("BoxShape3D_leg")
+
+[node name="ColLegBL" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 1.4, 0.75)
+shape = SubResource("BoxShape3D_leg")
+
+[node name="ColLegBR" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 1.4, 0.75)
+shape = SubResource("BoxShape3D_leg")
+
+[node name="ColShelfBase" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 0)
+shape = SubResource("BoxShape3D_shelf_plate")
+
+[node name="ColShelfDiv1" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("BoxShape3D_shelf_plate")
+
+[node name="ColShelfDiv2" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.46, 0)
+shape = SubResource("BoxShape3D_shelf_plate")
+
+[node name="ColShelfDiv3" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.02, 0)
+shape = SubResource("BoxShape3D_shelf_plate")
 
 [node name="LegFL" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 1.4, -0.75)
@@ -76,7 +107,7 @@ font_size = 22
 outline_size = 12
 
 [node name="LabelTier4" type="Label3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.95, 2.30, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.95, 2.3, 0)
 billboard = 1
 modulate = Color(1, 0.88, 0.2, 1)
 outline_modulate = Color(0, 0, 0, 1)

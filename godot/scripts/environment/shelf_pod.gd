@@ -3,7 +3,7 @@ extends RigidBody3D
 
 ## Mobile Multi-Tier Stackable Storage Pod.
 ## Stores categorized SKU goods across 4 vertical tiers (Tier 1 to Tier 4).
-## Supports dynamic physical toppling, momentum impact response, and physical ToteBox inventory.
+## Built with hollow physical bays & shelf plates. Boxes rest physically on shelves.
 
 @export var pod_id: int = 1
 @export var zone_name: String = "Zone A"
@@ -33,35 +33,24 @@ func _ready() -> void:
 func _physics_process(_delta: float) -> void:
 	if not is_lifted and not is_toppled:
 		var up_alignment: float = global_transform.basis.y.dot(Vector3.UP)
-		# Only topple and release boxes when rack has genuinely tipped past tipping point (tilted > 45 deg)
-		if up_alignment < 0.68:
+		# Tilted past tipping point (~49 degrees): rack is toppled
+		if up_alignment < 0.65:
 			is_toppled = true
-			spill_all_totes()
 			SoundManager.play_spatial(self, SoundManager.sfx_brake, 2.0, 0.65)
 			if label_3d:
 				label_3d.text = "[%s]\n⚠️ RACK TOPPLED!\nSKU-%s-#%02d" % [zone_name, sku_category, pod_id]
 				label_3d.modulate = Color(1.0, 0.2, 0.2, 1.0)
-		else:
-			# Keep docked boxes aligned with rack frame during upright nudges
-			for box in _docked_boxes:
-				if is_instance_valid(box) and not box._is_spilled and box.freeze:
-					box.update_dock_transform()
 
 func register_tote(box: ToteBox) -> void:
 	if not _docked_boxes.has(box):
 		_docked_boxes.append(box)
-
-func spill_all_totes() -> void:
-	for box in _docked_boxes:
-		if is_instance_valid(box) and box.visible and not box._is_spilled:
-			box.spill_from_rack()
 
 func pick_tote(tier: int, check_pos: Vector3) -> Dictionary:
 	var best_box: ToteBox = null
 	var min_dist: float = 3.5
 
 	for box in _docked_boxes:
-		if is_instance_valid(box) and box.visible and not box._is_spilled and box.tier == tier:
+		if is_instance_valid(box) and box.visible and box.tier == tier:
 			var d: float = box.global_position.distance_to(check_pos)
 			if d < min_dist:
 				min_dist = d
@@ -69,7 +58,6 @@ func pick_tote(tier: int, check_pos: Vector3) -> Dictionary:
 
 	if best_box:
 		best_box.visible = false
-		best_box.freeze = true
 		return {
 			"found": true,
 			"material": best_box._material,

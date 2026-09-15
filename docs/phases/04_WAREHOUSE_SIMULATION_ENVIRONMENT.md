@@ -6,7 +6,7 @@
 - **Detailed Plan**: §1 Scope & Agreed Architectural Decisions; §2 Input & Output Contracts; §3 Mobile Manipulator Kinematics & Arm Picking Mechanics; §4 Time-Space Anti-Deadlock Engine; §5 Discrete Inventory & Fulfillment Lifecycle; §6 Godot 3D Synchronization & Visual Controls.
 - **References**: `docs/PURPOSE.md`, `docs/DREAM/DREAM.md`, `agents/templates/PHASE_DOC_TEMPLATE.md`, `agents/rules/FOLDER_STRUCTURE.md`.
 - **Created**: 2026-09-15T07:57:00+07:00
-- **Last Updated**: 2026-09-15T09:46:00+07:00
+- **Last Updated**: 2026-09-15T09:53:00+07:00
 
 ---
 
@@ -213,15 +213,15 @@ graph TD
 
 - **Collision Layers & Masks**:
   - **Layer 1 (`Environment_Static`)**: Ground floor ($140 \times 100\,\text{m}$) and 4 boundary perimeter walls. Supports downward gravity $\vec{g} = (0, -9.81, 0)\,\text{m/s}^2$.
-  - **Layer 2 (`Racks_Dynamic`)**: 32 storage pods upgraded to **`RigidBody3D` ($m = 280\,\text{kg}$)** with custom center of mass ($y = 0.85\,\text{m}$). Racks stand firmly under normal conditions, but an AMR ramming at speed transfers momentum and creates an overturning moment, causing the rack to realistically tilt, wobble, and topple over!
+  - **Layer 2 (`Racks_Dynamic`)**: 32 storage pods built as **hollow compound rigid bodies** (`RigidBody3D`, $m = 280\,\text{kg}$) with 4 corner post colliders and 4 horizontal shelf divider plates, leaving real open physical space between tiers.
   - **Layer 4 (`AMR_Fleet`)**: AMRs configured as **`CharacterBody3D` with `move_and_slide()`**. Bumper collisions transfer kinetic impulse to `RigidBody3D` colliders and trigger crash SFX.
-  - **Layer 8 (`Tote_Boxes`)**: 256 physical **`ToteBox` (`RigidBody3D`, $m = 12\,\text{kg}$)** nodes. Docked neatly in rack tiers while upright. When a rack is rammed at speed ($v > 1.8\,\text{m/s}$) or tilts $>30^\circ$, all 8 boxes violently spill off the shelves, tumble through the 3D space, hit the floor, bounce, and scatter across the aisle!
+  - **Layer 8 (`Tote_Boxes`)**: 256 live physical **`ToteBox` (`RigidBody3D`, $m = 12\,\text{kg}$)** nodes. They are **100% dynamic physics objects at all times (`freeze = false`)** resting directly on top of the physical shelf plates under real gravity. When an AMR rams a rack hard enough to tip it over, the shelf plates tilt, and the boxes slide off the shelves and crash to the floor completely through natural Godot physics!
   - **AMR Box Plowing**: When `DEV-01` drives into scattered boxes on the floor, the kinematic collision loop transfers momentum, plowing, nudging, and kicking boxes across the warehouse.
 
 - **Full Environment Reset Standard (`R` Key & HUD Reset Button)**:
   - Triggering `_reset_entire_environment()`:
     1. **All 32 Storage Racks**: Restored to their exact initial positions and upright transforms using `PhysicsServer3D.body_set_state` and `_integrate_forces`, zeroing linear and angular velocities, clearing the toppled status, and restoring zone labels.
-    2. **All 256 Tote Boxes**: Teleported back to their assigned shelf slots, frozen upright, velocities zeroed, and visibility restored.
+    2. **All 256 Tote Boxes**: Teleported back onto their assigned shelf plates with zeroed velocities, ready to rest naturally under gravity.
     3. **All AMRs (`DEV-01` & Fleet)**: Reset to initial berths with zero velocity, folded arm pose, cleared cargo tray, and restored HUD telemetry.
     4. **Manifests**: Inbound and Outbound orders reset to `PENDING`.
 

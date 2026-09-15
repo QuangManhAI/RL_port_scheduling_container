@@ -2,7 +2,8 @@ class_name ToteBox
 extends RigidBody3D
 
 ## Dynamic Physical Tote Box for Autonomous Mobile Manipulator & Racking.
-## Supports full 3D physics: gravity, momentum transfer, and collision response with floor, AMRs, and other boxes.
+## 100% Real Physical RigidBody3D at all times — rests directly on hollow rack shelf plates,
+## slides naturally off tilting racks, tumbles under gravity, and responds to AMR impacts.
 
 @export var tier: int = 1
 @export var slot_side: String = "L"
@@ -13,7 +14,6 @@ var home_shelf: ShelfPod = null
 var slot_offset: Vector3 = Vector3.ZERO
 
 var _initial_transform: Transform3D
-var _is_spilled: bool = false
 var _needs_reset: bool = false
 var _material: Material = null
 
@@ -22,10 +22,9 @@ var _material: Material = null
 
 func _ready() -> void:
 	add_to_group("tote_boxes")
-	if _initial_transform == Transform3D():
-		_initial_transform = global_transform
-	# Docked by default: frozen in rack until rack topples or grabbed
-	freeze = true
+	# Live physics: NEVER artificially frozen. Rests on physical shelf plates under gravity.
+	freeze = false
+	can_sleep = true
 
 func dock_to_shelf(shelf: ShelfPod, p_tier: int, p_side: String, p_offset: Vector3, mat: Material, p_zone: String, p_cat: String, p_initial_world_pos: Vector3 = Vector3.ZERO) -> void:
 	home_shelf = shelf
@@ -43,33 +42,16 @@ func dock_to_shelf(shelf: ShelfPod, p_tier: int, p_side: String, p_offset: Vecto
 		_initial_transform = Transform3D(Basis.IDENTITY, p_initial_world_pos)
 		global_transform = _initial_transform
 	else:
-		update_dock_transform()
 		_initial_transform = global_transform
 
-	freeze = true
-	_is_spilled = false
-
-func update_dock_transform() -> void:
-	if home_shelf and not _is_spilled and freeze:
-		global_transform = home_shelf.global_transform
-		global_position = home_shelf.global_position + home_shelf.global_transform.basis * slot_offset
-
-func spill_from_rack() -> void:
-	if _is_spilled:
-		return
-	_is_spilled = true
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
 	freeze = false
 
-	# Naturally release with rack's physical momentum — NO artificial upward pop or explosive ejection
-	if home_shelf:
-		linear_velocity = home_shelf.linear_velocity
-		angular_velocity = home_shelf.angular_velocity
-
 func reset_box() -> void:
-	_is_spilled = false
-	freeze = true
-	_needs_reset = true
 	visible = true
+	_needs_reset = true
+	freeze = false
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 
