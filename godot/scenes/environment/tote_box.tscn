@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scripts/environment/tote_box.gd" id="1_script"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_tote"]
-size = Vector3(0.58, 0.35, 1.2)
+size = Vector3(0.58, 0.32, 0.55)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_default"]
 albedo_color = Color(0.1, 0.65, 0.95, 1)
@@ -12,7 +12,7 @@ metallic = 0.15
 
 [sub_resource type="BoxMesh" id="BoxMesh_tote"]
 material = SubResource("StandardMaterial3D_default")
-size = Vector3(0.58, 0.35, 1.2)
+size = Vector3(0.58, 0.32, 0.55)
 
 [node name="ToteBox" type="RigidBody3D"]
 collision_layer = 8

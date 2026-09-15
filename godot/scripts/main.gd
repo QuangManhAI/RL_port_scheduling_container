@@ -58,7 +58,7 @@ func _ready() -> void:
 
 	hud.log_event("[color=green]🎮 ENVIRONMENT BUILDING SECTOR ACTIVE[/color]")
 	hud.log_event("[color=cyan]DEV MANUAL BOT [DEV-01] initialized at intersection (0,0). Drive freely to inspect warehouse floor![/color]")
-	hud.log_event("[color=yellow]Controls: WASD: Drive | Space: Brake | E: Arm (1-4 Tier, F Pick) | R: Reset Env | C: Chase Cam[/color]")
+	hud.log_event("[color=yellow]Controls: WASD: Drive | Space: Brake | Click/E: Target & 3D IK Pick | E: Stow in Tray | G: Place | R: Reset | C: Chase Cam[/color]")
 
 func _process(delta: float) -> void:
 	_update_fleet_telemetry_and_radar()
@@ -143,7 +143,7 @@ func _reset_entire_environment() -> void:
 	if hud:
 		hud.update_ai_inspector(
 			"🎮 [DEV-01] PILOT: Ready at Center (0,0)",
-			"WASD: Drive | Space: Brake | E: Arm | R: Reset Env | C: Cam"
+			"WASD: Drive | Space: Brake | Click/E: Pick | E: Stow | G: Place | R: Reset"
 		)
 
 func _on_toggle_chase_cam() -> void:

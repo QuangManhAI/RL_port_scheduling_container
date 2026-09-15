@@ -152,25 +152,33 @@ stateDiagram-v2
     CHARGING --> IDLE: Battery >= 95%
 ```
 
-### 4.3 Developer Manual Bot (`DEV-01`) Interactive Motion Sequence
+### 4.3 Developer Manual Bot (`DEV-01`) Dynamic Robotic Arm & 3D IK Mechanics
 
-For manual environment testing and physical validation, `DEV-01` features an interactive arm state machine:
+For manual environment testing and physical validation, `DEV-01` features a continuous 4-DOF dynamic robotic arm with analytical 3D Inverse Kinematics, parallel mechanical clamping fingers, and interactive targeting:
 
 ```mermaid
 stateDiagram-v2
     [*] --> STATIONARY: Folded Travel Pose
-    STATIONARY --> PREPARING: Press [E]
-    PREPARING --> AIMING_TIER: Press [1, 2, 3, or 4]
-    AIMING_TIER --> AIMING_TIER: Press [1-4] to change tier
-    AIMING_TIER --> STATIONARY: Press [E] (Cancel / No box)
-    AIMING_TIER --> PICKING: Press [F] (Reach & Grasp)
-    PICKING --> GRIPPED: Collision with box at Tier
-    PICKING --> AIMING_TIER: No box in range
-    GRIPPED --> STOWING: Press [E]
-    STOWING --> STATIONARY: Box placed in Tray & Arm folded
+    STATIONARY --> TARGETING: Mouse Click on Box OR Press [E]
+    TARGETING --> PRE_GRASP: In-Reach (< 1.4m) + Press [E]
+    TARGETING --> TARGETING: Out-of-Reach (> 1.4m Red Reticle)
+    PRE_GRASP --> INSERTING: Linear Horizontal Bay Reach
+    INSERTING --> CLAMPING: Mechanical Two-Finger Clamping
+    CLAMPING --> RETRACTING: Linear Retraction with Box
+    RETRACTING --> HELD_READY: Held in Clear Aisle Zone
+    HELD_READY --> STOWING: Press [E] (Swivels to Tray Slot 1 or 2)
+    STOWING --> STATIONARY: Released as Active RigidBody3D in Tray
+    HELD_READY --> PLACING: Press [G] (Lowers onto Floor in front)
+    PLACING --> STATIONARY: Released as Active RigidBody3D on Floor
 ```
 
-- **Motion Sequence Rules**:
+- **Interactive Operator Controls**:
+  - `Mouse Left Click`: Casts 3D raycast from viewport camera to select any `ToteBox` (on rack shelf or floor).
+  - `[E] Key`: Targets nearest box (if none selected) and triggers 3-stage dynamic pick; if holding box, stows to next available cargo tray slot.
+  - `[G] Key`: Dynamically places held box onto the floor in front of the robot.
+  - `Targeting Reticle`: Real-time holographic ring (Cyan when in reach $\le 1.40\,\text{m}$, Red when out of reach).
+  - `Dual-Slot Physical Tray`: Slot 1 (Front) and Slot 2 (Rear) with physical raised retention guardrails.
+  - See [`DYNAMIC_ROBOTIC_ARM_DESIGN_DECISIONS.md`](../references/DYNAMIC_ROBOTIC_ARM_DESIGN_DECISIONS.md) for architectural trade-off evaluations.
 ### 4.3 Audio Design & Sound Effects Mapping
 
 To provide tactile, responsive operator feedback without project bloat (<300 KB total), an audio layer is configured via [`SoundManager`](../../godot/scripts/utils/sound_manager.gd):
