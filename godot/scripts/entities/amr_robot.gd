@@ -61,6 +61,7 @@ var arm_reach_side: float = 1.0
 var stowed_box_count: int = 0
 var _current_box_material: Material = null
 var _is_arm_tweening: bool = false
+var _was_braking: bool = false
 var _arm_status_text: String = "[WASD] Drive | [E] Prep Arm"
 
 func _ready() -> void:
@@ -153,18 +154,23 @@ func _process_manual_driving(delta: float) -> void:
 
 	# Apply linear acceleration / deceleration
 	if is_braking:
+		if not _was_braking:
+			SoundManager.play_spatial(self, SoundManager.sfx_brake, -4.0)
+		_was_braking = true
 		_manual_linear_vel = move_toward(_manual_linear_vel, 0.0, linear_deceleration * 2.0 * delta)
 		set_amr_state(AmrState.BLOCKED_SAFETY)
-	elif abs(move_input) > 0.01:
-		var target_v: float = move_input * max_speed
-		_manual_linear_vel = move_toward(_manual_linear_vel, target_v, linear_acceleration * delta)
-		set_amr_state(AmrState.MOVING)
 	else:
-		_manual_linear_vel = move_toward(_manual_linear_vel, 0.0, linear_deceleration * delta)
-		if abs(_manual_linear_vel) < 0.05:
-			_manual_linear_vel = 0.0
-			if not _is_arm_tweening and arm_motion_state == ArmMotionState.STATIONARY:
-				set_amr_state(AmrState.IDLE)
+		_was_braking = false
+		if abs(move_input) > 0.01:
+			var target_v: float = move_input * max_speed
+			_manual_linear_vel = move_toward(_manual_linear_vel, target_v, linear_acceleration * delta)
+			set_amr_state(AmrState.MOVING)
+		else:
+			_manual_linear_vel = move_toward(_manual_linear_vel, 0.0, linear_deceleration * delta)
+			if abs(_manual_linear_vel) < 0.05:
+				_manual_linear_vel = 0.0
+				if not _is_arm_tweening and arm_motion_state == ArmMotionState.STATIONARY:
+					set_amr_state(AmrState.IDLE)
 
 	# Forward translation (-transform.basis.z is forward in Godot 3D)
 	if abs(_manual_linear_vel) > 0.01:
@@ -206,6 +212,7 @@ func prepare_arm_for_pickup() -> void:
 	_is_arm_tweening = true
 	arm_motion_state = ArmMotionState.PREPARING
 	set_amr_state(AmrState.LIFTING)
+	SoundManager.play_spatial(self, SoundManager.sfx_arm_prepare, -1.0)
 
 	# Detect whether nearest rack is to Left or Right
 	var shelf: ShelfPod = _find_nearest_shelf()
@@ -221,8 +228,8 @@ func prepare_arm_for_pickup() -> void:
 
 	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	tween.tween_property(arm, "rotation:y", deg_to_rad(90.0 * arm_reach_side), 0.35)
-	tween.parallel().tween_property(shoulder, "rotation:x", deg_to_rad(-18.0), 0.35)
-	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(35.0), 0.35)
+	tween.parallel().tween_property(shoulder, "rotation:x", deg_to_rad(-35.0), 0.35)
+	tween.parallel().tween_property(elbow, "rotation:x", deg_to_rad(50.0), 0.35)
 	tween.parallel().tween_property(wrist, "rotation:x", deg_to_rad(-15.0), 0.35)
 
 	tween.finished.connect(func():
@@ -235,27 +242,31 @@ func aim_arm_at_tier(tier: int) -> void:
 	arm_motion_state = ArmMotionState.AIMING_TIER
 	_is_arm_tweening = true
 
+	# Play audio with slightly rising pitch based on tier height
+	SoundManager.play_spatial(self, SoundManager.sfx_tier_select, 0.0, 0.85 + float(tier) * 0.12)
+
 	var shoulder_angle: float = 0.0
 	var elbow_angle: float = 0.0
 	var wrist_angle: float = 0.0
 
+	# Tier 1 is lowest floor (h=0.62m), Tier 4 is top floor (h=2.30m)
 	match selected_tier:
-		1:
-			shoulder_angle = deg_to_rad(-10.0)
-			elbow_angle = deg_to_rad(25.0)
-			wrist_angle = deg_to_rad(-15.0)
-		2:
-			shoulder_angle = deg_to_rad(-30.0)
-			elbow_angle = deg_to_rad(50.0)
+		1: # Floor level (lowest)
+			shoulder_angle = deg_to_rad(-68.0)
+			elbow_angle = deg_to_rad(88.0)
 			wrist_angle = deg_to_rad(-20.0)
-		3:
-			shoulder_angle = deg_to_rad(-52.0)
-			elbow_angle = deg_to_rad(74.0)
-			wrist_angle = deg_to_rad(-22.0)
-		4:
-			shoulder_angle = deg_to_rad(-72.0)
-			elbow_angle = deg_to_rad(96.0)
-			wrist_angle = deg_to_rad(-24.0)
+		2: # Mid-low level
+			shoulder_angle = deg_to_rad(-46.0)
+			elbow_angle = deg_to_rad(65.0)
+			wrist_angle = deg_to_rad(-19.0)
+		3: # Mid-high level
+			shoulder_angle = deg_to_rad(-24.0)
+			elbow_angle = deg_to_rad(42.0)
+			wrist_angle = deg_to_rad(-18.0)
+		4: # Top rack floor (highest)
+			shoulder_angle = deg_to_rad(-2.0)
+			elbow_angle = deg_to_rad(20.0)
+			wrist_angle = deg_to_rad(-18.0)
 
 	_arm_status_text = "Tier %d Aimed: [F] Pick | [1-4] Tier | [E] Fold" % selected_tier
 	_update_dev_status_label()
@@ -280,8 +291,8 @@ func execute_pick_attempt() -> void:
 
 	var base_shoulder: float = shoulder.rotation.x
 	var base_elbow: float = elbow.rotation.x
-	var extend_shoulder: float = base_shoulder + deg_to_rad(15.0)
-	var extend_elbow: float = base_elbow - deg_to_rad(20.0)
+	var extend_shoulder: float = base_shoulder - deg_to_rad(8.0)
+	var extend_elbow: float = base_elbow + deg_to_rad(14.0)
 
 	var tween: Tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	# 1. Forward reach extension into shelf bay
@@ -317,9 +328,11 @@ func execute_pick_attempt() -> void:
 		if has_gripped_box:
 			arm_motion_state = ArmMotionState.GRIPPED
 			_arm_status_text = "📦 Box Gripped! Press [E] to stow in tray"
+			SoundManager.play_spatial(self, SoundManager.sfx_box_pick, +2.0)
 		else:
 			arm_motion_state = ArmMotionState.AIMING_TIER
 			_arm_status_text = "⚠️ No box reached. [1-4] Tier | [E] Fold"
+			SoundManager.play_spatial(self, SoundManager.sfx_cancel, -3.0)
 		_update_dev_status_label()
 	)
 
@@ -353,6 +366,7 @@ func stow_box_to_tray() -> void:
 			tray_box.visible = true
 		stowed_box_count += 1
 		has_gripped_box = false
+		SoundManager.play_spatial(self, SoundManager.sfx_box_stow, +1.0)
 	)
 
 	tween.tween_interval(0.12)
@@ -377,6 +391,7 @@ func return_arm_to_stationary() -> void:
 	_is_arm_tweening = true
 	_arm_status_text = "Folding arm to stationary..."
 	_update_dev_status_label()
+	SoundManager.play_spatial(self, SoundManager.sfx_cancel, -2.0)
 
 	var tween: Tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tween.tween_property(arm, "rotation:y", 0.0, 0.35)

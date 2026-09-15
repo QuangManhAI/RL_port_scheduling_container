@@ -67,30 +67,66 @@ var _raw_log_lines: Array[String] = []
 
 func _ready() -> void:
 	if btn_inbound:
-		btn_inbound.pressed.connect(func(): dispatch_inbound_requested.emit())
+		btn_inbound.pressed.connect(func():
+			SoundManager.play_ui(self, SoundManager.sfx_click)
+			dispatch_inbound_requested.emit()
+		)
 	if btn_outbound:
-		btn_outbound.pressed.connect(func(): dispatch_outbound_requested.emit())
+		btn_outbound.pressed.connect(func():
+			SoundManager.play_ui(self, SoundManager.sfx_click)
+			dispatch_outbound_requested.emit()
+		)
 	if btn_dev_cam:
-		btn_dev_cam.pressed.connect(func(): chase_cam_toggled.emit())
+		btn_dev_cam.pressed.connect(func():
+			SoundManager.play_ui(self, SoundManager.sfx_toggle)
+			chase_cam_toggled.emit()
+		)
 	if btn_spawn_center:
-		btn_spawn_center.pressed.connect(func(): spawn_dev_bot_requested.emit("CENTER"))
+		btn_spawn_center.pressed.connect(func():
+			SoundManager.play_ui(self, SoundManager.sfx_click)
+			spawn_dev_bot_requested.emit("CENTER")
+		)
 	if btn_spawn_dock:
-		btn_spawn_dock.pressed.connect(func(): spawn_dev_bot_requested.emit("DOCK"))
+		btn_spawn_dock.pressed.connect(func():
+			SoundManager.play_ui(self, SoundManager.sfx_click)
+			spawn_dev_bot_requested.emit("DOCK")
+		)
 	if btn_spawn_pick:
-		btn_spawn_pick.pressed.connect(func(): spawn_dev_bot_requested.emit("PICK"))
+		btn_spawn_pick.pressed.connect(func():
+			SoundManager.play_ui(self, SoundManager.sfx_click)
+			spawn_dev_bot_requested.emit("PICK")
+		)
 	if btn_reset:
-		btn_reset.pressed.connect(func(): reset_requested.emit())
+		btn_reset.pressed.connect(func():
+			SoundManager.play_ui(self, SoundManager.sfx_cancel)
+			reset_requested.emit()
+		)
 	if btn_fullscreen:
-		btn_fullscreen.pressed.connect(func(): fullscreen_toggled.emit())
+		btn_fullscreen.pressed.connect(func():
+			SoundManager.play_ui(self, SoundManager.sfx_toggle)
+			fullscreen_toggled.emit()
+		)
 
 	if btn_cam1:
-		btn_cam1.pressed.connect(func(): camera_preset_requested.emit(1))
+		btn_cam1.pressed.connect(func():
+			SoundManager.play_ui(self, SoundManager.sfx_click)
+			camera_preset_requested.emit(1)
+		)
 	if btn_cam2:
-		btn_cam2.pressed.connect(func(): camera_preset_requested.emit(2))
+		btn_cam2.pressed.connect(func():
+			SoundManager.play_ui(self, SoundManager.sfx_click)
+			camera_preset_requested.emit(2)
+		)
 	if btn_cam3:
-		btn_cam3.pressed.connect(func(): camera_preset_requested.emit(3))
+		btn_cam3.pressed.connect(func():
+			SoundManager.play_ui(self, SoundManager.sfx_click)
+			camera_preset_requested.emit(3)
+		)
 	if btn_cam4:
-		btn_cam4.pressed.connect(func(): camera_preset_requested.emit(4))
+		btn_cam4.pressed.connect(func():
+			SoundManager.play_ui(self, SoundManager.sfx_click)
+			camera_preset_requested.emit(4)
+		)
 
 	if log_box:
 		log_box.gui_input.connect(_on_log_gui_input)

@@ -179,6 +179,21 @@ stateDiagram-v2
      - **If box is held**: Swivels $180^\circ$ towards rear cargo tray, lowers box onto tray bed, transfers tote box to tray, and folds arm back to stationary.
      - **If no box is held**: Folds arm directly back to stationary resting pose.
 
+### 4.4 Audio Design & Sound Effects Mapping
+
+To provide tactile, responsive operator feedback without project bloat (<300 KB total), an audio layer is configured via [`SoundManager`](../../godot/scripts/utils/sound_manager.gd):
+
+| Event | Bus / Space | Asset Source | File |
+| :--- | :--- | :--- | :--- |
+| **Button Click / Spawn** | 2D UI | `MenuSFX/OGG/Abstract` | `res://audio/ui/click.ogg` |
+| **Reset / Cancel** | 2D UI | `MenuSFX/OGG/Abstract` | `res://audio/ui/cancel.ogg` |
+| **Camera / Fullscreen Toggle** | 2D UI | `MenuSFX/OGG/Abstract` | `res://audio/ui/toggle.ogg` |
+| **Arm Prepare Swivel** | 3D Spatial | `MenuSFX/OGG/Abstract` | `res://audio/sfx/arm_prepare.ogg` |
+| **Rack Tier Select (1..4)** | 3D Spatial | `MenuSFX/OGG/Abstract` | `res://audio/sfx/tier_select.ogg` *(rising pitch $0.85 \rightarrow 1.33$)* |
+| **Box Grasp / Pick Latch** | 3D Spatial | `MenuSFX/OGG/Abstract` | `res://audio/sfx/box_pick.ogg` |
+| **Box Stow to Cargo Tray** | 3D Spatial | `MenuSFX/OGG/Abstract` | `res://audio/sfx/box_stow.ogg` |
+| **Hydraulic Brake Impact** | 3D Spatial | `SweetSounds_SFX/WAV` | `res://audio/sfx/brake.wav` |
+
 ---
 
 ## 5. Verification & Implementation Phases
