@@ -4,12 +4,12 @@ extends RefCounted
 ## Analytical Closed-Form 3D Inverse Kinematics Solver for AMR 4-DOF Manipulator.
 ## Solves Base Yaw, Shoulder Pitch, Elbow Pitch, and Wrist Pitch in O(1) time.
 
-const SHOULDER_OFFSET_Y: float = 0.10 # Height offset of shoulder joint relative to arm base (m)
-const L1_BOOM: float = 0.65          # Shoulder to Elbow link length (m)
-const L2_FOREARM: float = 0.55       # Elbow to Wrist link length (m)
-const L3_GRIPPER: float = 0.22       # Wrist to Gripper contact center (m)
-const MAX_REACH: float = 1.40        # Maximum reach envelope (m)
-const MIN_REACH: float = 0.25        # Minimum reach envelope (m)
+const SHOULDER_OFFSET_Y: float = 0.18 # Height offset of shoulder joint relative to arm base (m)
+const L1_BOOM: float = 1.02          # Shoulder to Elbow link length (+57% extended for rack tier reach)
+const L2_FOREARM: float = 0.86       # Elbow to Wrist link length (+56% extended)
+const L3_GRIPPER: float = 0.25       # Wrist to Gripper contact center (m)
+const MAX_REACH: float = 2.15        # Maximum reach envelope (m) - reaches all 4 tiers comfortably
+const MIN_REACH: float = 0.20        # Minimum reach envelope (m)
 
 ## Result struct containing calculated joint angles and reachability status
 class IKResult:
@@ -18,7 +18,7 @@ class IKResult:
 	var shoulder_pitch: float = 0.0 # Rotation around X (radians)
 	var elbow_pitch: float = 0.0    # Rotation around X (radians)
 	var wrist_pitch: float = 0.0    # Rotation around X (radians)
-	var target_distance: float = 0.0
+	var target_distance: float = 0.0 # Physical distance from shoulder pivot to target
 	var error_message: String = ""
 
 ## Solves IK for a target position in the local coordinate frame of RoboticArm
@@ -27,12 +27,10 @@ static func solve_local(target: Vector3, approach_pitch: float = 0.0) -> IKResul
 
 	# 1. Target relative to shoulder pivot
 	var p_sh: Vector3 = target - Vector3(0.0, SHOULDER_OFFSET_Y, 0.0)
-	res.target_distance = target.length()
+	res.target_distance = p_sh.length() # Distance directly from the arm's shoulder joint
 
 	# 2. Base Azimuth Yaw
 	# In Godot 3D, forward is -Z, right is +X, left is -X.
-	# Positive rotation around Y rotates toward -X, negative rotation rotates toward +X.
-	# atan2(-x, -z) gives 0 for -Z, -PI/2 for +X, +PI/2 for -X, and PI for +Z.
 	var target_xz := Vector2(p_sh.x, p_sh.z)
 	var r_total: float = target_xz.length()
 
@@ -49,7 +47,7 @@ static func solve_local(target: Vector3, approach_pitch: float = 0.0) -> IKResul
 
 	if res.target_distance < MIN_REACH:
 		res.success = false
-		res.error_message = "Target too close to turret (%.2fm < %.2fm)" % [res.target_distance, MIN_REACH]
+		res.error_message = "Target too close to shoulder (%.2fm < %.2fm)" % [res.target_distance, MIN_REACH]
 		return res
 
 	# 4. Planar projection for Two-Bone 2D IK

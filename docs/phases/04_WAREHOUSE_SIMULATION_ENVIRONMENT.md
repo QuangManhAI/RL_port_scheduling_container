@@ -154,30 +154,33 @@ stateDiagram-v2
 
 ### 4.3 Developer Manual Bot (`DEV-01`) Dynamic Robotic Arm & 3D IK Mechanics
 
-For manual environment testing and physical validation, `DEV-01` features a continuous 4-DOF dynamic robotic arm with analytical 3D Inverse Kinematics, parallel mechanical clamping fingers, and interactive targeting:
+For manual environment testing and physical validation, `DEV-01` features a continuous 4-DOF dynamic robotic arm on a pedestal mast with analytical 3D Inverse Kinematics, parallel mechanical clamping fingers, dual-slot physical cargo tray with `Area3D` payload sensors, and interactive targeting:
 
 ```mermaid
 stateDiagram-v2
     [*] --> STATIONARY: Folded Travel Pose
     STATIONARY --> TARGETING: Mouse Click on Box OR Press [E]
-    TARGETING --> PRE_GRASP: In-Reach (< 1.4m) + Press [E]
-    TARGETING --> TARGETING: Out-of-Reach (> 1.4m Red Reticle)
+    TARGETING --> STATIONARY: Press [Esc] to Cancel
+    TARGETING --> PRE_GRASP: In-Reach (< 2.15m) + Press [E]
+    TARGETING --> TARGETING: Out-of-Reach (> 2.15m Red Reticle)
     PRE_GRASP --> INSERTING: Linear Horizontal Bay Reach
     INSERTING --> CLAMPING: Mechanical Two-Finger Clamping
     CLAMPING --> RETRACTING: Linear Retraction with Box
     RETRACTING --> HELD_READY: Held in Clear Aisle Zone
-    HELD_READY --> STOWING: Press [E] (Swivels to Tray Slot 1 or 2)
-    STOWING --> STATIONARY: Released as Active RigidBody3D in Tray
+    HELD_READY --> STOWING: Press [E] (Swivels to First Empty Slot)
+    STOWING --> STATIONARY: Parented to Tray Bed & Folded
     HELD_READY --> PLACING: Press [G] (Lowers onto Floor in front)
     PLACING --> STATIONARY: Released as Active RigidBody3D on Floor
 ```
 
 - **Interactive Operator Controls**:
   - `Mouse Left Click`: Casts 3D raycast from viewport camera to select any `ToteBox` (on rack shelf or floor).
-  - `[E] Key`: Targets nearest box (if none selected) and triggers 3-stage dynamic pick; if holding box, stows to next available cargo tray slot.
+  - `[E] Key`: Targets nearest box (if none selected) and triggers 3-stage dynamic pick; if holding box, stows to first available cargo tray slot.
   - `[G] Key`: Dynamically places held box onto the floor in front of the robot.
-  - `Targeting Reticle`: Real-time holographic ring (Cyan when in reach $\le 1.40\,\text{m}$, Red when out of reach).
-  - `Dual-Slot Physical Tray`: Slot 1 (Front) and Slot 2 (Rear) with physical raised retention guardrails.
+  - `[Esc] Key`: Quick-cancels active targeting/pick state and smoothly returns the arm to stationary travel pose.
+  - `Targeting Reticle`: Real-time holographic ring (Cyan when in reach $\le 2.15\,\text{m}$, Red when out of reach). Target distance is measured strictly from the shoulder joint.
+  - `Extended Reach Envelope`: $L_1 = 1.02\,\text{m}, L_2 = 0.86\,\text{m}, L_3 = 0.25\,\text{m}, R_{max} = 2.15\,\text{m}$, mounted on a $0.2\,\text{m}$ pedestal mast ($Y = 0.56\,\text{m}$ world shoulder height) to reach all 4 rack tiers ($h = 0.56, 1.11, 1.67, 2.23\,\text{m}$).
+  - `Dual-Slot Physical Tray with Area3D Sensors`: Slot 1 (Front $Z = -0.22$) and Slot 2 (Rear $Z = +0.22$) equipped with physical `Area3D` sensors for real-time payload detection (dropping to 0 if boxes spill in a collision), zero-floating transit lock, and dynamic crash ejection.
   - See [`DYNAMIC_ROBOTIC_ARM_DESIGN_DECISIONS.md`](../references/DYNAMIC_ROBOTIC_ARM_DESIGN_DECISIONS.md) for architectural trade-off evaluations.
 ### 4.3 Audio Design & Sound Effects Mapping
 
