@@ -107,8 +107,11 @@ class MinimalWebSocketServer:
             print(f"[!] Client error: {e}")
         finally:
             self.clients.discard(writer)
-            writer.close()
-            await writer.wait_closed()
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except Exception:
+                pass
             print("[-] Godot Warehouse Digital Twin disconnected")
 
     async def broadcast(self, data: Dict[str, Any]) -> None:
