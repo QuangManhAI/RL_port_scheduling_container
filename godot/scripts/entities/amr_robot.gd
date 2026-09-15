@@ -1,5 +1,5 @@
 class_name AmrRobot
-extends Node3D
+extends CharacterBody3D
 
 ## Autonomous Mobile Robot (AMR) designed for smart warehouse Goods-to-Person logistics.
 ## Features elevating turntable, multi-color state LED ring, rotating LiDAR, and VDA 5050 state reporting.
@@ -128,6 +128,10 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if is_manual_control:
 		_process_manual_driving(delta)
+	else:
+		if not is_on_floor():
+			velocity.y -= 9.81 * delta
+			move_and_slide()
 
 func _process_manual_driving(delta: float) -> void:
 	var move_input: float = 0.0
@@ -172,14 +176,40 @@ func _process_manual_driving(delta: float) -> void:
 				if not _is_arm_tweening and arm_motion_state == ArmMotionState.STATIONARY:
 					set_amr_state(AmrState.IDLE)
 
-	# Forward translation (-transform.basis.z is forward in Godot 3D)
-	if abs(_manual_linear_vel) > 0.01:
-		var forward_vec: Vector3 = -global_transform.basis.z
-		global_position += forward_vec * _manual_linear_vel * delta
+	# Gravity
+	if not is_on_floor():
+		velocity.y -= 9.81 * delta
+	else:
+		velocity.y = 0.0
 
-	# Floor boundary safety clamp
-	global_position.x = clamp(global_position.x, -33.0, 33.0)
-	global_position.z = clamp(global_position.z, -35.0, 32.0)
+	# Directional velocity in horizontal XZ plane
+	# -transform.basis.z is forward in Godot 3D
+	var forward_vec: Vector3 = -global_transform.basis.z
+	velocity.x = forward_vec.x * _manual_linear_vel
+	velocity.z = forward_vec.z * _manual_linear_vel
+
+	# Execute kinematic physics motion
+	move_and_slide()
+
+	# Dynamic impact physics with RigidBody3D obstacles (e.g. Storage Racks)
+	for i in range(get_slide_collision_count()):
+		var col: KinematicCollision3D = get_slide_collision(i)
+		var collider = col.get_collider()
+		if collider is RigidBody3D:
+			var impact_speed: float = abs(_manual_linear_vel)
+			var impulse_dir: Vector3 = -col.get_normal()
+			# Off-center impact generates strong rotational torque that topples the rack if rammed at speed
+			var contact_offset: Vector3 = col.get_position() - collider.global_position
+			var impulse_mag: float = impact_speed * 1800.0 + 350.0
+			collider.apply_impulse(impulse_dir * impulse_mag * delta, contact_offset)
+
+			# If ramming at high speed, recoil/absorb kinetic energy on chassis
+			if impact_speed > 2.0:
+				_manual_linear_vel = move_toward(_manual_linear_vel, 0.0, 10.0 * delta)
+
+	# Safety boundary fallback clamp (walls will physically block first)
+	global_position.x = clamp(global_position.x, -40.0, 40.0)
+	global_position.z = clamp(global_position.z, -40.0, 40.0)
 
 	current_speed = abs(_manual_linear_vel)
 	_update_dev_status_label()

@@ -1,13 +1,18 @@
 class_name ShelfPod
-extends Node3D
+extends RigidBody3D
 
 ## Mobile Multi-Tier Stackable Storage Pod.
 ## Stores categorized SKU goods stacked across 4 vertical tiers (Tier 1 to Tier 4).
+## Supports dynamic physical toppling, momentum impact response, and tote inventory.
 
 @export var pod_id: int = 1
 @export var zone_name: String = "Zone A"
 @export var sku_category: String = "FMCG"
 @export var is_lifted: bool = false
+@export var is_toppled: bool = false
+
+var _initial_pos: Vector3
+var _initial_basis: Basis
 
 @onready var label_3d: Label3D = $PodLabel
 @onready var label_t1: Label3D = $LabelTier1
@@ -28,6 +33,17 @@ var _tote_materials: Array[StandardMaterial3D] = []
 
 func _ready() -> void:
 	add_to_group("shelf_pods")
+	_initial_pos = global_position
+	_initial_basis = global_transform.basis
+
+func _physics_process(_delta: float) -> void:
+	if not is_lifted and not is_toppled:
+		var up_alignment: float = global_transform.basis.y.dot(Vector3.UP)
+		if up_alignment < 0.72:
+			is_toppled = true
+			if label_3d:
+				label_3d.text = "[%s]\n⚠️ RACK TOPPLED!\nSKU-%s-#%02d" % [zone_name, sku_category, pod_id]
+				label_3d.modulate = Color(1.0, 0.2, 0.2, 1.0)
 
 func get_tote_at(tier: int, check_pos: Vector3) -> MeshInstance3D:
 	var left_node: MeshInstance3D = null
@@ -97,7 +113,21 @@ func setup(p_id: int, p_zone: String = "Zone A", p_cat: String = "FMCG", zone_co
 	if label_t3: label_t3.modulate = Color(0.95, 0.6, 0.1)
 	if label_t4: label_t4.modulate = Color(1.0, 0.85, 0.2)
 
+func reset_rack() -> void:
+	is_toppled = false
+	is_lifted = false
+	freeze = false
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	global_position = _initial_pos
+	global_transform.basis = _initial_basis
+	reset_totes()
+	if label_3d:
+		label_3d.text = "[%s]\nSKU-%s-#%02d\n▼ T1 / T2 / T3 / T4 ▼" % [zone_name, sku_category, pod_id]
+		label_3d.modulate = Color.WHITE
+
 func lift_by_amr(amr_turntable: Node3D) -> Tween:
+	freeze = true
 	is_lifted = true
 	var current_global_pos: Vector3 = global_position
 	get_parent().remove_child(self)
@@ -117,6 +147,7 @@ func drop_to_floor(new_parent: Node3D, floor_pos: Vector3) -> Tween:
 
 	var tween: Tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tween.tween_property(self, "global_position", floor_pos, 0.5)
+	tween.finished.connect(func(): freeze = false)
 	return tween
 
 func highlight(active: bool) -> void:

@@ -78,7 +78,7 @@ func generate_zoned_warehouse() -> void:
 			var row_x: float = center_x + side
 			for p in range(4):
 				var pod_z: float = -14.0 + float(p) * 6.5
-				var instance: ShelfPod = spawn_pod(next_id, Vector3(row_x, 0.0, pod_z), z_name, z_cat, z_col)
+				var instance: ShelfPod = spawn_pod(next_id, Vector3(row_x, 0.02, pod_z), z_name, z_cat, z_col)
 				_pods_by_zone[z_name].append(instance)
 				next_id += 1
 
