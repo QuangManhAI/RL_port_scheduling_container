@@ -6,9 +6,10 @@ extends Node3D
 ## Zone B: Electronics & High-Tech (Emerald)
 ## Zone C: Pharmaceuticals & Sensitive (Purple)
 ## Zone D: Heavy Bulky Pallet Stacks (Amber)
-## Plus Overhead 3D Zone Banners and Inbound/Outbound Staging Docks.
+## Generates 32 hollow physical ShelfPods and 256 physical ToteBoxes resting on shelf plates.
 
 @export var pod_scene: PackedScene = preload("res://scenes/environment/shelf_pod.tscn")
+@export var tote_scene: PackedScene = preload("res://scenes/environment/tote_box.tscn")
 
 const ZONE_CONFIGS: Array[Dictionary] = [
 	{
@@ -45,15 +46,31 @@ const ZONE_CONFIGS: Array[Dictionary] = [
 	}
 ]
 
+const TOTE_SLOT_DEFS: Array[Dictionary] = [
+	{"tier": 1, "side": "L", "offset": Vector3(-0.36, 0.56, 0.0)},
+	{"tier": 1, "side": "R", "offset": Vector3(0.36, 0.56, 0.0)},
+	{"tier": 2, "side": "L", "offset": Vector3(-0.36, 1.11, 0.0)},
+	{"tier": 2, "side": "R", "offset": Vector3(0.36, 1.11, 0.0)},
+	{"tier": 3, "side": "L", "offset": Vector3(-0.36, 1.67, 0.0)},
+	{"tier": 3, "side": "R", "offset": Vector3(0.36, 1.67, 0.0)},
+	{"tier": 4, "side": "L", "offset": Vector3(-0.36, 2.23, 0.0)},
+	{"tier": 4, "side": "R", "offset": Vector3(0.36, 2.23, 0.0)},
+]
+
 var _pods: Dictionary = {}
 var _pods_by_zone: Dictionary = {"Zone A": [], "Zone B": [], "Zone C": [], "Zone D": []}
 var _pods_root: Node3D
+var _totes_root: Node3D
 var _signs_root: Node3D
 
 func _ready() -> void:
 	_pods_root = Node3D.new()
 	_pods_root.name = "PodsRoot"
 	add_child(_pods_root)
+
+	_totes_root = Node3D.new()
+	_totes_root.name = "TotesRoot"
+	add_child(_totes_root)
 
 	_signs_root = Node3D.new()
 	_signs_root.name = "SignsRoot"
@@ -78,7 +95,8 @@ func generate_zoned_warehouse() -> void:
 			var row_x: float = center_x + side
 			for p in range(4):
 				var pod_z: float = -14.0 + float(p) * 6.5
-				var instance: ShelfPod = spawn_pod(next_id, Vector3(row_x, 0.0, pod_z), z_name, z_cat, z_col)
+				var pod_pos: Vector3 = Vector3(row_x, 0.02, pod_z)
+				var instance: ShelfPod = spawn_pod(next_id, pod_pos, z_name, z_cat, z_col)
 				_pods_by_zone[z_name].append(instance)
 				next_id += 1
 
@@ -103,10 +121,30 @@ func _create_overhead_banner(pos: Vector3, text: String, col: Color) -> void:
 
 func spawn_pod(p_id: int, pos: Vector3, z_name: String, z_cat: String, z_col: Color) -> ShelfPod:
 	var instance: ShelfPod = pod_scene.instantiate() as ShelfPod
-	_pods_root.add_child(instance)
 	instance.position = pos
-	instance.setup(p_id, z_name, z_cat, z_col)
+	_pods_root.add_child(instance)
+	instance.setup(p_id, z_name, z_cat, z_col, pos)
 	_pods[p_id] = instance
+
+	# Spawn 8 physical ToteBox instances resting on the shelf plates of this rack
+	for s_def in TOTE_SLOT_DEFS:
+		var tier_idx: int = s_def["tier"]
+		var side_str: String = s_def["side"]
+		var offset_vec: Vector3 = s_def["offset"]
+
+		var box_mat := StandardMaterial3D.new()
+		var tier_factor: float = 0.75 + float(tier_idx) * 0.08
+		box_mat.albedo_color = Color(z_col.r * tier_factor, z_col.g * tier_factor, z_col.b * tier_factor, 1.0)
+		box_mat.roughness = 0.35
+		box_mat.metallic = 0.2
+
+		var box_pos: Vector3 = pos + offset_vec
+		var box_inst: ToteBox = tote_scene.instantiate() as ToteBox
+		box_inst.position = box_pos
+		_totes_root.add_child(box_inst)
+		box_inst.dock_to_shelf(instance, tier_idx, side_str, offset_vec, box_mat, z_name, z_cat, box_pos)
+		instance.register_tote(box_inst)
+
 	return instance
 
 func get_pod(p_id: int) -> ShelfPod:

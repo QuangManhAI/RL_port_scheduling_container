@@ -6,7 +6,7 @@
 - **Detailed Plan**: §1 Scope & Agreed Architectural Decisions; §2 Input & Output Contracts; §3 Mobile Manipulator Kinematics & Arm Picking Mechanics; §4 Time-Space Anti-Deadlock Engine; §5 Discrete Inventory & Fulfillment Lifecycle; §6 Godot 3D Synchronization & Visual Controls.
 - **References**: `docs/PURPOSE.md`, `docs/DREAM/DREAM.md`, `agents/templates/PHASE_DOC_TEMPLATE.md`, `agents/rules/FOLDER_STRUCTURE.md`.
 - **Created**: 2026-09-15T07:57:00+07:00
-- **Last Updated**: 2026-09-15T08:04:00+07:00
+- **Last Updated**: 2026-09-15T09:53:00+07:00
 
 ---
 
@@ -171,15 +171,7 @@ stateDiagram-v2
 ```
 
 - **Motion Sequence Rules**:
-  1. **Stationary State**: Arm folded in home resting pose ($0^\circ$ yaw, folded boom and forearm). No box in hand. Differential driving active via `WASD` / Arrow keys.
-  2. **Prepare for Pickup (`E`)**: Swivels arm to face the nearest storage rack (detects Left vs. Right side via local transform projection). Elevates to ready posture.
-  3. **Select Rack Tier (`1`, `2`, `3`, `4`)**: Adjusts shoulder, elbow, and wrist joint pitch to align with the selected rack tier elevation (Tier 1: $0.62\,\text{m}$, Tier 2: $1.18\,\text{m}$, Tier 3: $1.74\,\text{m}$, Tier 4: $2.30\,\text{m}$). Camera presets are cleanly overridden so view does not jump.
-  4. **Pick Up Box (`F`)**: Arm extends into shelf bay. Detects physical/geometric collision with shelf tote at that tier. If present, removes box from rack and grasps it with gripper (`has_gripped_box = true`). If no box, retracts and prompts player.
-  5. **Stow to Tray / Fold (`E`)**:
-     - **If box is held**: Swivels $180^\circ$ towards rear cargo tray, lowers box onto tray bed, transfers tote box to tray, and folds arm back to stationary.
-     - **If no box is held**: Folds arm directly back to stationary resting pose.
-
-### 4.4 Audio Design & Sound Effects Mapping
+### 4.3 Audio Design & Sound Effects Mapping
 
 To provide tactile, responsive operator feedback without project bloat (<300 KB total), an audio layer is configured via [`SoundManager`](../../godot/scripts/utils/sound_manager.gd):
 
@@ -192,20 +184,82 @@ To provide tactile, responsive operator feedback without project bloat (<300 KB 
 | **Rack Tier Select (1..4)** | 3D Spatial | `MenuSFX/OGG/Abstract` | `res://audio/sfx/tier_select.ogg` *(rising pitch $0.85 \rightarrow 1.33$)* |
 | **Box Grasp / Pick Latch** | 3D Spatial | `MenuSFX/OGG/Abstract` | `res://audio/sfx/box_pick.ogg` |
 | **Box Stow to Cargo Tray** | 3D Spatial | `MenuSFX/OGG/Abstract` | `res://audio/sfx/box_stow.ogg` |
-| **Hydraulic Brake Impact** | 3D Spatial | `SweetSounds_SFX/WAV` | `res://audio/sfx/brake.wav` |
+| **Hydraulic Brake / Impact** | 3D Spatial | `SweetSounds_SFX/WAV` | `res://audio/sfx/brake.wav` |
+
+---
+
+### 4.5 Physical Collision Architecture, Dynamic Boxes & Environment Reset
+
+In the **Environment Building Sector**, all physical entities are simulated in full 3D rigid-body and kinematic collision physics:
+
+```mermaid
+graph TD
+    subgraph Godot Physical Simulation
+        Floor["Warehouse Floor & Walls (StaticBody3D)<br>Layer 1: Static Ground & Perimeter Walls"]
+        Racks["32 Storage Pod Racks (RigidBody3D, m=280kg)<br>Layer 2: Dynamic Racks (Can Topple & Fall!)"]
+        AMR["AMRs: DEV-01 & Fleet (CharacterBody3D, m=150kg)<br>Layer 3: Fleet (move_and_slide)"]
+        Totes["256 Physical Tote Boxes (RigidBody3D, m=12kg)<br>Layer 4 (bit 8): Falling, Tumbing & Bouncing Boxes"]
+        Audio["SoundManager Acoustics<br>Impact thuds & crash cues"]
+    end
+
+    AMR -->|Gravity -9.81 m/s²| Floor
+    Racks -->|Gravity -9.81 m/s² & Friction| Floor
+    Totes -->|Gravity -9.81 m/s² & Bounce/Friction| Floor
+    AMR -->|High Speed Ram: Overturning Torque| Racks
+    Racks -->|Topple >30° / High Impact: Spill All Boxes!| Totes
+    AMR -->|Drive & Plow into Scattered Boxes| Totes
+    Racks -->|Crash Sound Cue| Audio
+```
+
+- **Collision Layers & Masks**:
+  - **Layer 1 (`Environment_Static`)**: Ground floor ($140 \times 100\,\text{m}$) and 4 boundary perimeter walls. Supports downward gravity $\vec{g} = (0, -9.81, 0)\,\text{m/s}^2$.
+  - **Layer 2 (`Racks_Dynamic`)**: 32 storage pods built as **hollow compound rigid bodies** (`RigidBody3D`, $m = 280\,\text{kg}$) with 4 corner post colliders and 4 horizontal shelf divider plates, leaving real open physical space between tiers.
+  - **Layer 4 (`AMR_Fleet`)**: AMRs configured as **`CharacterBody3D` with `move_and_slide()`**. Bumper collisions transfer kinetic impulse to `RigidBody3D` colliders and trigger crash SFX.
+  - **Layer 8 (`Tote_Boxes`)**: 256 live physical **`ToteBox` (`RigidBody3D`, $m = 12\,\text{kg}$)** nodes. They are **100% dynamic physics objects at all times (`freeze = false`)** resting directly on top of the physical shelf plates under real gravity. When an AMR rams a rack hard enough to tip it over, the shelf plates tilt, and the boxes slide off the shelves and crash to the floor completely through natural Godot physics!
+  - **AMR Box Plowing**: When `DEV-01` drives into scattered boxes on the floor, the kinematic collision loop transfers momentum, plowing, nudging, and kicking boxes across the warehouse.
+
+- **Full Environment Reset Standard (`R` Key & HUD Reset Button)**:
+  - Triggering `_reset_entire_environment()`:
+    1. **All 32 Storage Racks**: Restored to their exact initial positions and upright transforms using `PhysicsServer3D.body_set_state` and `_integrate_forces`, zeroing linear and angular velocities, clearing the toppled status, and restoring zone labels.
+    2. **All 256 Tote Boxes**: Teleported back onto their assigned shelf plates with zeroed velocities, ready to rest naturally under gravity.
+    3. **All AMRs (`DEV-01` & Fleet)**: Reset to initial berths with zero velocity, folded arm pose, cleared cargo tray, and restored HUD telemetry.
+    4. **Manifests**: Inbound and Outbound orders reset to `PENDING`.
+
+### 4.6 RL Observation, Action & Reward Foundations
+
+- **Observation Space $\mathbf{o}_t \in \mathbb{R}^{24}$**:
+  - 16-beam normalized LiDAR distances $d_i \in [0, 1]$.
+  - Chassis forward velocity $v$ and yaw rate $\omega$.
+  - Relative target vector $(\Delta x_{goal}, \Delta z_{goal}, \Delta \theta_{goal})$.
+  - Onboard tote count $N_{totes} \in [0, 4]$.
+  - Collision bumper contact flag $\in \{0, 1\}$.
+  - Lateral acceleration $a_{lateral}$.
+- **Reward Formulation**:
+  $$R_t = R_{progress} + R_{pick\_stow} - P_{collision} - P_{instability} - P_{time}$$
+  - $R_{progress} = c_{prog} \cdot (d_{t-1} - d_t)$ (potential-based shaping).
+  - $R_{pick\_stow} = +50.0$ per successfully stowed tote box.
+  - $P_{collision} = -30.0 - 10.0 \cdot \|\vec{v}_{impact}\|$ (severe penalty for hitting obstacles).
+  - $P_{instability} = -2.0 \cdot \max(0, |a_{lateral}| - 2.5)^2$ (penalizes load-tipping maneuvers).
+  - $P_{time} = -0.02$ per timestep (encourages efficient throughput).
 
 ---
 
 ## 5. Verification & Implementation Phases
 
-1. **Step 1 (`src/warehouse/core/`)**:
-   - Implement `grid_map.py`: Discrete directed graph, node types, aisle coordinates.
-   - Implement `inventory_manager.py`: Discrete rack slots, SKU categories, occupancy tracking.
-2. **Step 2 (`src/warehouse/simulation/`)**:
+1. **Step 1 (`src/warehouse/core/`)** — Completed:
+   - Implemented `grid_map.py`: Discrete directed graph, node types, aisle coordinates.
+   - Implemented `inventory_manager.py`: Discrete rack slots, SKU categories, occupancy tracking.
+2. **Step 2 (`src/warehouse/simulation/`)** — In Progress:
+   - Implement `collision_detector.py`: Vectorized Separating Axis Theorem (SAT) OBB and LiDAR raycasting for headless Python training.
    - Implement `reservation_table.py`: Time-space conflict resolver with priority yielding.
    - Implement `amr_kinematics.py`: Differential drive kinematics, arm pick/stow sequences, battery model.
-   - Implement `warehouse_env.py`: Gym-compatible step/reset loop with configurable time-scaling.
-3. **Step 3 (`godot/`)**:
-   - Update `amr_robot.tscn`: Mobile Manipulator chassis, articulated 3-joint picking arm, rear cargo tray.
-   - Implement interactive Developer Manual Bot arm state machine (`E` prepare $\rightarrow$ `1-4` tier $\rightarrow$ `F` pick $\rightarrow$ `E` stow/fold).
-   - Implement interactive 3rd-person follow chase camera (`C`).
+3. **Step 3 (`godot/`)** — Completed:
+   - Redesigned `amr_robot.tscn`: Mobile Manipulator chassis matching reference design, articulated 3-joint picking arm, rear cargo tray.
+   - Implemented interactive Developer Manual Bot arm state machine (`E` prepare $\rightarrow$ `1-4` tier $\rightarrow$ `F` pick $\rightarrow$ `E` stow/fold).
+   - Integrated lightweight curated audio SFX library (<300 KB) and `SoundManager`.
+4. **Step 4 (`godot/` & `src/warehouse/`) — Physical Collisions & Gravity**:
+   - Upgrade `warehouse_floor.tscn` and `shelf_pod.tscn` with `StaticBody3D` colliders.
+   - Upgrade `amr_robot.tscn` to `CharacterBody3D` with `move_and_slide()` gravity and bumper recoil.
+   - Attach 16-ray `RayCast3D` virtual LiDAR ring to AMR chassis.
+   - Verify headless Python collision parity with Godot 3D physics.
+

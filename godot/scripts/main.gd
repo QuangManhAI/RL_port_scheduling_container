@@ -50,7 +50,7 @@ func _ready() -> void:
 		sim_client.disconnected_from_server.connect(_on_server_disconnected)
 		sim_client.state_received.connect(_on_state_received)
 
-	_reset_fleet_positions()
+	_reset_entire_environment()
 	_refresh_manifest_ui()
 
 	if camera_rig and amr_1:
@@ -58,7 +58,7 @@ func _ready() -> void:
 
 	hud.log_event("[color=green]🎮 ENVIRONMENT BUILDING SECTOR ACTIVE[/color]")
 	hud.log_event("[color=cyan]DEV MANUAL BOT [DEV-01] initialized at intersection (0,0). Drive freely to inspect warehouse floor![/color]")
-	hud.log_event("[color=yellow]Controls: W/S or UP/DOWN to Drive | A/D or LEFT/RIGHT to Steer | Space: Brake | C: Chase Cam | 1-4: Overhead Cameras[/color]")
+	hud.log_event("[color=yellow]Controls: WASD: Drive | Space: Brake | E: Arm (1-4 Tier, F Pick) | R: Reset Env | C: Chase Cam[/color]")
 
 func _process(delta: float) -> void:
 	_update_fleet_telemetry_and_radar()
@@ -115,29 +115,35 @@ func _refresh_manifest_ui() -> void:
 		var col: Color = Color(0.2, 0.9, 0.4) if ord["state"] == "SHIPPED" else (Color(1.0, 0.8, 0.1) if ord["state"] == "PICKING" else Color(0.8, 1.0, 0.85))
 		hud.update_manifest_outbound(i + 1, "%s: %s [%s:T%d] -> Stn %d (%s)" % [ord["id"], ord["sku"], ord["zone"], ord["tier"], ord["station"], ord["state"]], col)
 
-func _reset_fleet_positions() -> void:
-	amr_1.robot_id = "DEV-01"
-	amr_1.is_manual_control = true
-	amr_1.global_position = Vector3(0.0, 0.0, 0.0)
-	amr_1.rotation = Vector3.ZERO
-	amr_1.set_amr_state(AmrRobot.AmrState.IDLE)
+func _reset_entire_environment() -> void:
+	# 1. Reset all ShelfPods (32 dynamic racks)
+	var pods = get_tree().get_nodes_in_group("shelf_pods")
+	for pod in pods:
+		if pod is ShelfPod:
+			pod.reset_rack()
 
-	amr_2.global_position = Vector3(18.0, 0.0, -10.0)
-	amr_2.rotation = Vector3.ZERO
-	amr_2.set_amr_state(AmrRobot.AmrState.IDLE)
+	# 2. Reset all ToteBoxes (256 physical boxes)
+	var boxes = get_tree().get_nodes_in_group("tote_boxes")
+	for b in boxes:
+		if b is ToteBox:
+			b.reset_box()
 
-	amr_3.global_position = Vector3(-18.0, 0.0, 10.0)
-	amr_3.rotation = Vector3.ZERO
-	amr_3.set_amr_state(AmrRobot.AmrState.IDLE)
-
-	amr_4.global_position = Vector3(0.0, 0.0, -32.0)
-	amr_4.rotation = Vector3.ZERO
-	amr_4.set_amr_state(AmrRobot.AmrState.IDLE)
+	# 3. Reset all AMRs and folded arms
+	if amr_1:
+		amr_1.robot_id = "DEV-01"
+		amr_1.is_manual_control = true
+		amr_1.reset_robot(Vector3(0.0, 0.0, 0.0), 0.0)
+	if amr_2:
+		amr_2.reset_robot(Vector3(18.0, 0.0, -10.0), 0.0)
+	if amr_3:
+		amr_3.reset_robot(Vector3(-18.0, 0.0, 10.0), 0.0)
+	if amr_4:
+		amr_4.reset_robot(Vector3(0.0, 0.0, -32.0), deg_to_rad(180.0))
 
 	if hud:
 		hud.update_ai_inspector(
 			"🎮 [DEV-01] PILOT: Ready at Center (0,0)",
-			"WASD / Arrows: Drive | Space: Brake | C: Chase Cam"
+			"WASD: Drive | Space: Brake | E: Arm | R: Reset Env | C: Cam"
 		)
 
 func _on_toggle_chase_cam() -> void:
@@ -249,7 +255,7 @@ func _on_dispatch_outbound() -> void:
 
 func _on_simulate_4way_conflict() -> void:
 	hud.log_event("[color=yellow]▶ Simulating 4-Way Intersection Conflict at Node (0,0)...[/color]")
-	_reset_fleet_positions()
+	_reset_entire_environment()
 
 	hud.log_event("[color=cyan]AMR-01: Dispatched West -> East via Intersection (0,0)[/color]")
 	hud.log_event("[color=cyan]AMR-02: Dispatched North -> South via Intersection (0,0)[/color]")
@@ -291,7 +297,7 @@ func _on_auto_fleet_toggled(enabled: bool) -> void:
 	_auto_timer = 0.0
 
 func _on_reset_floor() -> void:
-	_reset_fleet_positions()
+	_reset_entire_environment()
 	_cur_inbound_idx = 0
 	_cur_outbound_idx = 0
 	for ord in inbound_orders:
@@ -299,7 +305,7 @@ func _on_reset_floor() -> void:
 	for ord in outbound_orders:
 		ord["state"] = "PENDING"
 	_refresh_manifest_ui()
-	hud.log_event("[color=red]Resetting warehouse floor, manifest queues & fleet berths.[/color]")
+	hud.log_event("[color=yellow]🔄 Entire warehouse floor, 32 dynamic racks, 256 physical boxes & fleet reset![/color]")
 
 func _on_camera_preset_requested(preset_idx: int) -> void:
 	if not camera_rig:
@@ -342,6 +348,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		if key.keycode == KEY_F11 or (key.keycode == KEY_ENTER and key.alt_pressed):
 			get_viewport().set_input_as_handled()
 			toggle_fullscreen()
+		elif key.keycode == KEY_R:
+			get_viewport().set_input_as_handled()
+			_on_reset_floor()
 
 func toggle_fullscreen() -> void:
 	var now: int = Time.get_ticks_msec()

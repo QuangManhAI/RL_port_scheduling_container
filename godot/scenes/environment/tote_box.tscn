@@ -1,0 +1,29 @@
+[gd_scene load_steps=5 format=3 uid="uid://dmx3totebox001"]
+
+[ext_resource type="Script" path="res://scripts/environment/tote_box.gd" id="1_script"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_tote"]
+size = Vector3(0.58, 0.35, 1.2)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_default"]
+albedo_color = Color(0.1, 0.65, 0.95, 1)
+roughness = 0.4
+metallic = 0.15
+
+[sub_resource type="BoxMesh" id="BoxMesh_tote"]
+material = SubResource("StandardMaterial3D_default")
+size = Vector3(0.58, 0.35, 1.2)
+
+[node name="ToteBox" type="RigidBody3D"]
+collision_layer = 8
+collision_mask = 15
+mass = 12.0
+linear_damp = 0.8
+angular_damp = 1.2
+script = ExtResource("1_script")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape3D_tote")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_tote")

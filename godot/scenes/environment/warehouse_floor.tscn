@@ -1,4 +1,4 @@
-[gd_scene load_steps=18 format=3 uid="uid://dmx3whfloor002"]
+[gd_scene load_steps=21 format=3 uid="uid://dmx3whfloor002"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_epoxy_floor"]
 albedo_color = Color(0.8, 0.82, 0.85, 1)
@@ -67,7 +67,40 @@ roughness = 0.5
 material = SubResource("StandardMaterial3D_qr_marker")
 size = Vector3(0.35, 0.025, 0.35)
 
+[sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
+size = Vector3(140, 1, 100)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_long"]
+size = Vector3(140, 16, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_short"]
+size = Vector3(1, 16, 100)
+
 [node name="WarehouseFloor" type="Node3D"]
+
+[node name="WarehouseFloorCollision" type="StaticBody3D" parent="."]
+collision_layer = 1
+collision_mask = 0
+
+[node name="ColFloor" type="CollisionShape3D" parent="WarehouseFloorCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+shape = SubResource("BoxShape3D_floor")
+
+[node name="ColWallNorth" type="CollisionShape3D" parent="WarehouseFloorCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8, -50)
+shape = SubResource("BoxShape3D_wall_long")
+
+[node name="ColWallSouth" type="CollisionShape3D" parent="WarehouseFloorCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8, 50)
+shape = SubResource("BoxShape3D_wall_long")
+
+[node name="ColWallWest" type="CollisionShape3D" parent="WarehouseFloorCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -70, 8, 0)
+shape = SubResource("BoxShape3D_wall_short")
+
+[node name="ColWallEast" type="CollisionShape3D" parent="WarehouseFloorCollision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 70, 8, 0)
+shape = SubResource("BoxShape3D_wall_short")
 
 [node name="ConcreteSlab" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
