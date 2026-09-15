@@ -42,6 +42,7 @@ func _ready() -> void:
 		hud.auto_fleet_toggled.connect(_on_auto_fleet_toggled)
 		hud.reset_requested.connect(_on_reset_floor)
 		hud.camera_preset_requested.connect(_on_camera_preset_requested)
+		hud.fullscreen_toggled.connect(toggle_fullscreen)
 
 	if sim_client:
 		sim_client.connected_to_server.connect(_on_server_connected)
@@ -309,3 +310,24 @@ func _on_state_received(state_dict: Dictionary) -> void:
 		hud.update_telemetry(pick_boost, fleet_count, deadlocks, deadheading, _total_manifests, true)
 		if event_msg != "":
 			hud.log_event("[color=cyan][VDA 5050] %s[/color]" % event_msg)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		var key: InputEventKey = event as InputEventKey
+		if key.keycode == KEY_F11 or (key.keycode == KEY_ENTER and key.alt_pressed):
+			toggle_fullscreen()
+
+func toggle_fullscreen() -> void:
+	var cur_mode: DisplayServer.WindowMode = DisplayServer.window_get_mode()
+	if cur_mode == DisplayServer.WINDOW_MODE_FULLSCREEN or cur_mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		if hud and hud.btn_fullscreen:
+			hud.btn_fullscreen.text = "⛶ Full [F11]"
+		if hud:
+			hud.log_event("[color=yellow]Window display switched to Windowed mode.[/color]")
+	else:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		if hud and hud.btn_fullscreen:
+			hud.btn_fullscreen.text = "🗗 Window [F11]"
+		if hud:
+			hud.log_event("[color=cyan]Window display switched to Fullscreen mode (Press F11 or Alt+Enter to exit).[/color]")

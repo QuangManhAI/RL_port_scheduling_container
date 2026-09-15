@@ -17,7 +17,7 @@ config/icon="res://icon.svg"
 
 window/size/viewport_width=1920
 window/size/viewport_height=1080
-window/size/mode=0
+window/size/mode=3
 window/size/resizable=true
 window/vsync/vsync_mode=1
 

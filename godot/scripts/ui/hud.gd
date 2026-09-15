@@ -10,6 +10,7 @@ signal conflict_demo_requested
 signal reset_requested
 signal auto_fleet_toggled(enabled: bool)
 signal camera_preset_requested(preset_idx: int)
+signal fullscreen_toggled
 
 @onready var lbl_pick_rate: Label = $TopBar/KPIContainer/CardPickRate/ValPickRate
 @onready var lbl_active_fleet: Label = $TopBar/KPIContainer/CardFleet/ValFleet
@@ -49,6 +50,7 @@ signal camera_preset_requested(preset_idx: int)
 @onready var btn_conflict: Button = $BottomBar/Controls/BtnConflict
 @onready var btn_auto: Button = $BottomBar/Controls/BtnAuto
 @onready var btn_reset: Button = $BottomBar/Controls/BtnReset
+@onready var btn_fullscreen: Button = $BottomBar/Controls/BtnFullscreen
 @onready var btn_cam1: Button = $BottomBar/Controls/BtnCam1
 @onready var btn_cam2: Button = $BottomBar/Controls/BtnCam2
 @onready var btn_cam3: Button = $BottomBar/Controls/BtnCam3
@@ -68,6 +70,8 @@ func _ready() -> void:
 		btn_auto.pressed.connect(_on_auto_pressed)
 	if btn_reset:
 		btn_reset.pressed.connect(func(): reset_requested.emit())
+	if btn_fullscreen:
+		btn_fullscreen.pressed.connect(func(): fullscreen_toggled.emit())
 
 	if btn_cam1:
 		btn_cam1.pressed.connect(func(): camera_preset_requested.emit(1))
