@@ -196,16 +196,75 @@ To provide tactile, responsive operator feedback without project bloat (<300 KB 
 
 ---
 
+### 4.5 Physical Collision Architecture & Gravity Dynamics
+
+To ground the simulation in realistic mechanics suitable for reinforcement learning:
+
+```mermaid
+graph TD
+    subgraph Godot Physics Architecture
+        Floor["Warehouse Floor & Walls (StaticBody3D)<br>Layer 1: Static Environment"]
+        Racks["32 Storage Pod Racks (StaticBody3D)<br>Layer 2: Obstacles / Racks"]
+        AMR["AMRs: DEV-01 & Fleet (CharacterBody3D)<br>Layer 3: Fleet (move_and_slide)"]
+        Totes["SKU Tote Boxes (RigidBody3D / Area3D)<br>Layer 4: Cargo Totes"]
+        LiDAR["Virtual 2D LiDAR (16-Ray RayCast3D)<br>Layer 6: Sensor Raycasts"]
+    end
+
+    AMR -->|Collides & Bounces| Racks
+    AMR -->|Collides & Stops| Floor
+    AMR -->|Mutual Fleet Collision| AMR
+    LiDAR -->|Detects Distance| Racks
+    LiDAR -->|Detects Distance| AMR
+    Totes -->|Rests Under Gravity| AMR
+```
+
+- **Collision Layers & Masks**:
+  - **Layer 1 (`Environment_Static`)**: Ground floor ($70 \times 70\,\text{m}$) and perimeter boundary walls. Supports downward gravity $\vec{g} = (0, -9.81, 0)\,\text{m/s}^2$.
+  - **Layer 2 (`Racks_Obstacles`)**: 32 stationary storage pods with compound upright corner colliders.
+  - **Layer 3 (`AMR_Fleet`)**: All AMRs upgraded from kinematic translation to `CharacterBody3D` with `move_and_slide()`. Enables realistic friction, inertia, and elastic bumper recoil upon striking racks or other AMRs.
+  - **Layer 4 (`Payload_Totes`)**: Small tote boxes ($4.5\,\text{kg}$) subject to gravity and tray boundary rails.
+  - **Layer 5 (`Arm_Gripper`)**: Articulated arm collision volume to prevent clipping through rack steel beams.
+  - **Layer 6 (`Sensors_LiDAR`)**: 16 horizontal raycasts ($360^\circ$ radial coverage) detecting obstacles for the RL agent.
+
+- **Tote Box Retention & Centripetal Stability**:
+  - Rear cargo tray includes physical recessed bed and guardrails ($h = 0.08\,\text{m}$).
+  - Lateral centripetal acceleration monitor: $a_{centripetal} = v \cdot \omega$. If $|a_{centripetal}| > 2.8\,\text{m/s}^2$ (jerky turning at high velocity), a **Load Instability Penalty** is triggered in RL.
+
+### 4.6 RL Observation, Action & Reward Foundations
+
+- **Observation Space $\mathbf{o}_t \in \mathbb{R}^{24}$**:
+  - 16-beam normalized LiDAR distances $d_i \in [0, 1]$.
+  - Chassis forward velocity $v$ and yaw rate $\omega$.
+  - Relative target vector $(\Delta x_{goal}, \Delta z_{goal}, \Delta \theta_{goal})$.
+  - Onboard tote count $N_{totes} \in [0, 4]$.
+  - Collision bumper contact flag $\in \{0, 1\}$.
+  - Lateral acceleration $a_{lateral}$.
+- **Reward Formulation**:
+  $$R_t = R_{progress} + R_{pick\_stow} - P_{collision} - P_{instability} - P_{time}$$
+  - $R_{progress} = c_{prog} \cdot (d_{t-1} - d_t)$ (potential-based shaping).
+  - $R_{pick\_stow} = +50.0$ per successfully stowed tote box.
+  - $P_{collision} = -30.0 - 10.0 \cdot \|\vec{v}_{impact}\|$ (severe penalty for hitting obstacles).
+  - $P_{instability} = -2.0 \cdot \max(0, |a_{lateral}| - 2.5)^2$ (penalizes load-tipping maneuvers).
+  - $P_{time} = -0.02$ per timestep (encourages efficient throughput).
+
+---
+
 ## 5. Verification & Implementation Phases
 
-1. **Step 1 (`src/warehouse/core/`)**:
-   - Implement `grid_map.py`: Discrete directed graph, node types, aisle coordinates.
-   - Implement `inventory_manager.py`: Discrete rack slots, SKU categories, occupancy tracking.
-2. **Step 2 (`src/warehouse/simulation/`)**:
+1. **Step 1 (`src/warehouse/core/`)** — Completed:
+   - Implemented `grid_map.py`: Discrete directed graph, node types, aisle coordinates.
+   - Implemented `inventory_manager.py`: Discrete rack slots, SKU categories, occupancy tracking.
+2. **Step 2 (`src/warehouse/simulation/`)** — In Progress:
+   - Implement `collision_detector.py`: Vectorized Separating Axis Theorem (SAT) OBB and LiDAR raycasting for headless Python training.
    - Implement `reservation_table.py`: Time-space conflict resolver with priority yielding.
    - Implement `amr_kinematics.py`: Differential drive kinematics, arm pick/stow sequences, battery model.
-   - Implement `warehouse_env.py`: Gym-compatible step/reset loop with configurable time-scaling.
-3. **Step 3 (`godot/`)**:
-   - Update `amr_robot.tscn`: Mobile Manipulator chassis, articulated 3-joint picking arm, rear cargo tray.
-   - Implement interactive Developer Manual Bot arm state machine (`E` prepare $\rightarrow$ `1-4` tier $\rightarrow$ `F` pick $\rightarrow$ `E` stow/fold).
-   - Implement interactive 3rd-person follow chase camera (`C`).
+3. **Step 3 (`godot/`)** — Completed:
+   - Redesigned `amr_robot.tscn`: Mobile Manipulator chassis matching reference design, articulated 3-joint picking arm, rear cargo tray.
+   - Implemented interactive Developer Manual Bot arm state machine (`E` prepare $\rightarrow$ `1-4` tier $\rightarrow$ `F` pick $\rightarrow$ `E` stow/fold).
+   - Integrated lightweight curated audio SFX library (<300 KB) and `SoundManager`.
+4. **Step 4 (`godot/` & `src/warehouse/`) — Physical Collisions & Gravity**:
+   - Upgrade `warehouse_floor.tscn` and `shelf_pod.tscn` with `StaticBody3D` colliders.
+   - Upgrade `amr_robot.tscn` to `CharacterBody3D` with `move_and_slide()` gravity and bumper recoil.
+   - Attach 16-ray `RayCast3D` virtual LiDAR ring to AMR chassis.
+   - Verify headless Python collision parity with Godot 3D physics.
+
