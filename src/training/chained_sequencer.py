@@ -86,14 +86,29 @@ def run_evaluation(
     episodes: int = 10,
     port: int = 11011,
     device: str = "cpu",
+    headless: bool = True,
+    connect: bool = False,
+    fps: float = 30.0,
     verbose: bool = True,
 ) -> Tuple[float, List[Dict]]:
     """Runs orchestrated evaluation over multiple full cycles."""
     sequencer = ChainedSkillSequencer(device=device)
-    env = ChainedCycleEnv(port=port, ticks_per_step=4, headless=True, autostart=True)
+
+    if connect:
+        print(f">> Connecting to Godot on 127.0.0.1:{port} (F6 running scene)...")
+    elif not headless:
+        print(f">> Launching Godot in visual window with {fps} FPS pacing...")
+
+    env = ChainedCycleEnv(
+        port=port,
+        ticks_per_step=4,
+        headless=headless,
+        autostart=not connect,
+    )
 
     episode_results: List[Dict] = []
     successes = 0
+    step_delay = (1.0 / max(1.0, fps)) if not headless else 0.0
 
     print(f"=== Starting Stage 5 Chained Full-Cycle Evaluation ({episodes} episodes) ===")
 
@@ -114,6 +129,9 @@ def run_evaluation(
             obs, rew, term, trunc, info = env.step(action)
             total_steps += 1
             total_reward += rew
+
+            if step_delay > 0.0:
+                time.sleep(step_delay)
 
             new_sub_stage = info.get("sub_stage", 1)
             if new_sub_stage in sub_stage_steps:
@@ -179,13 +197,20 @@ def main() -> None:
     parser.add_argument("--episodes", type=int, default=10, help="Number of test episodes")
     parser.add_argument("--port", type=int, default=11011, help="TCP port for Godot bridge")
     parser.add_argument("--device", type=str, default="cpu", choices=["auto", "cuda", "cpu"])
+    parser.add_argument("--render", action="store_true", help="Launch Godot in visual window for real-time viewing")
+    parser.add_argument("--connect", action="store_true", help="Connect to running Godot Editor instance (F6)")
+    parser.add_argument("--fps", type=float, default=20.0, help="Actions per second when rendering (default: 20)")
     parser.add_argument("--quiet", action="store_true", help="Quiet mode")
 
     args = parser.parse_args()
+    headless = not (args.render or args.connect)
     run_evaluation(
         episodes=args.episodes,
         port=args.port,
         device=args.device,
+        headless=headless,
+        connect=args.connect,
+        fps=args.fps,
         verbose=not args.quiet,
     )
 
