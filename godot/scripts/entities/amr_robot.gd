@@ -89,6 +89,7 @@ var _arm_status_text: String = "[WASD] Drive | Click/E: Target Box"
 var is_rl_control: bool = false
 var _rl_target_v_lin: float = 0.0
 var _rl_target_v_ang: float = 0.0
+var _manual_angular_vel: float = 0.0
 
 func _ready() -> void:
 	_led_material = StandardMaterial3D.new()
@@ -630,7 +631,16 @@ func _process_rl_driving(delta: float) -> void:
 		move_and_slide()
 		return
 
-	rotate_y(_rl_target_v_ang * delta)
+	# Angular acceleration and active braking for turn speed
+	var ang_accel: float = 12.0
+	if abs(_rl_target_v_ang) < 0.05 or (_manual_angular_vel * _rl_target_v_ang < 0.0) or (abs(_rl_target_v_ang) < abs(_manual_angular_vel)):
+		ang_accel = 24.0 # Active angular braking
+
+	_manual_angular_vel = move_toward(_manual_angular_vel, _rl_target_v_ang, ang_accel * delta)
+	if abs(_manual_angular_vel) < 0.05 and abs(_rl_target_v_ang) < 0.05:
+		_manual_angular_vel = 0.0
+
+	rotate_y(_manual_angular_vel * delta)
 
 	# Active physical braking when decelerating, reversing, or stopping
 	var accel_rate: float = linear_acceleration
@@ -912,6 +922,7 @@ func reset_robot(spawn_pos: Vector3, spawn_rot_y: float = 0.0) -> void:
 	rotation = Vector3(0.0, spawn_rot_y, 0.0)
 	velocity = Vector3.ZERO
 	_manual_linear_vel = 0.0
+	_manual_angular_vel = 0.0
 	current_speed = 0.0
 	_was_braking = false
 	_is_arm_tweening = false

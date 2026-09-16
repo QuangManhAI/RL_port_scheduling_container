@@ -57,33 +57,36 @@ func _get_current_distance_to_zone() -> float:
 		return 999.0
 	return amr.global_position.distance_to(drop_zone_marker.global_position)
 
+const GLOBAL_ARENA_HALF_EXTENT: float = 8.0
+const GLOBAL_VECTOR_SPAN: float = 16.0
+
 func _compute_observation() -> Array:
 	var obs: Array = []
 	if not amr or not drop_zone_marker:
 		for i in range(13): obs.append(0.0)
 		return obs
 
-	# 0..3: Local pose
-	var norm_x = clampf(amr.global_position.x / arena_half_extent, -1.0, 1.0)
-	var norm_z = clampf(amr.global_position.z / arena_half_extent, -1.0, 1.0)
+	# 0..3: Local pose normalized to universal 8m half-extent
+	var norm_x = clampf(amr.global_position.x / GLOBAL_ARENA_HALF_EXTENT, -1.0, 1.0)
+	var norm_z = clampf(amr.global_position.z / GLOBAL_ARENA_HALF_EXTENT, -1.0, 1.0)
 	var yaw = amr.rotation.y
 	obs.append(norm_x)
 	obs.append(norm_z)
 	obs.append(sin(yaw))
 	obs.append(cos(yaw))
 
-	# 4..5: Velocities [v_lin/max_speed, v_ang/turn_speed]
-	var norm_v = clampf(amr._manual_linear_vel / maxf(amr.max_speed, 1.0), -1.0, 1.0)
-	var norm_w = clampf(amr._rl_target_v_ang / maxf(amr.turn_speed, 1.0), -1.0, 1.0)
+	# 4..5: Velocities normalized to physical limits [2.8 m/s, 2.2 rad/s]
+	var norm_v = clampf(amr._manual_linear_vel / 2.8, -1.0, 1.0)
+	var norm_w = clampf(amr._manual_angular_vel / 2.2, -1.0, 1.0)
 	obs.append(norm_v)
 	obs.append(norm_w)
 
-	# 6..8: Relative vector to drop zone
+	# 6..8: Relative vector to drop zone normalized to universal 16m metric span
 	var local_rel = amr.global_transform.basis.inverse() * (drop_zone_marker.global_position - amr.global_position)
 	var dist = _get_current_distance_to_zone()
-	obs.append(clampf(local_rel.x / (arena_half_extent * 2.0), -1.0, 1.0))
-	obs.append(clampf(-local_rel.z / (arena_half_extent * 2.0), -1.0, 1.0))
-	obs.append(clampf(dist / (arena_half_extent * 2.0), 0.0, 1.0))
+	obs.append(clampf(local_rel.x / GLOBAL_VECTOR_SPAN, -1.0, 1.0))
+	obs.append(clampf(-local_rel.z / GLOBAL_VECTOR_SPAN, -1.0, 1.0))
+	obs.append(clampf(dist / GLOBAL_VECTOR_SPAN, 0.0, 1.0))
 
 	# 9: Carrying flag = 1.0
 	obs.append(1.0)
@@ -94,12 +97,12 @@ func _compute_observation() -> Array:
 	# 11..12: Wall distances
 	var dist_x = arena_half_extent - abs(amr.global_position.x)
 	var dist_z = arena_half_extent - abs(amr.global_position.z)
-	obs.append(clampf(minf(dist_x, dist_z) / arena_half_extent, 0.0, 1.0))
+	obs.append(clampf(minf(dist_x, dist_z) / GLOBAL_ARENA_HALF_EXTENT, 0.0, 1.0))
 	obs.append(0.0)
 
 	return obs
 
-func _compute_reward(_action: Array) -> float:
+func _compute_reward(action: Array) -> float:
 	var cur_dist = _get_current_distance_to_zone()
 	var delta_dist = prev_distance_to_zone - cur_dist
 	prev_distance_to_zone = cur_dist
@@ -107,45 +110,39 @@ func _compute_reward(_action: Array) -> float:
 	var reward: float = 0.0
 
 	# 1. Progress shaping toward drop zone
-	reward += delta_dist * 3.5
+	reward += delta_dist * 3.0
+	reward -= 0.01 # Time penalty
 
-	# 2. Time penalty
-	reward -= 0.01
+	# 2. Strict anti-spinning penalty
+	var v_ang: float = float(action[1]) if action.size() > 1 else 0.0
+	reward -= 0.04 * abs(v_ang)
+	if abs(v_ang) > 0.4 and amr._manual_linear_vel < 0.3:
+		reward -= 0.08 * (abs(v_ang) - 0.4)
 
 	# 3. Orientation alignment shaping (facing drop zone)
 	var forward = -amr.global_transform.basis.z
 	var to_zone = (drop_zone_marker.global_position - amr.global_position).normalized()
 	var alignment = forward.dot(to_zone)
-	reward += alignment * 0.03
+	if alignment >= 0.0:
+		reward += alignment * 0.08
+	else:
+		reward -= 0.08 * abs(alignment)
 
-	# Soft penalty for driving backwards
-	if amr._manual_linear_vel < -0.1:
-		reward -= 0.05
+	# 4. Advance approach deceleration profile within 2.2m (prevents overshooting and orbiting)
+	if cur_dist <= 2.2 and amr.current_speed > 0.8:
+		reward -= 0.08 * (amr.current_speed - 0.8)
 
-	# 4. Turn stability penalty: discourage erratic turning while carrying cargo
-	reward -= 0.015 * abs(amr._rl_target_v_ang)
-
-	# 5. Advance approach deceleration profile within 2.5m (prevents overshooting and orbiting)
-	if cur_dist <= 2.5:
-		var target_approach_speed: float = clampf(cur_dist / 2.5, 0.15, 1.0) * amr.max_speed
-		if amr.current_speed > target_approach_speed:
-			reward -= 0.04 * ((amr.current_speed - target_approach_speed) / amr.max_speed)
-
-	# 6. Arrival and controlled stopping bonus
+	# 5. Arrival and controlled stopping bonus: requires facing drop zone and coming to stop <= 0.30 m/s
 	if cur_dist <= arrival_threshold:
-		# Penalize spinning inside the arrival zone (eliminates pirouette exploit)
-		reward -= 0.03 * abs(amr._rl_target_v_ang)
-
 		if alignment >= 0.35:
 			if amr.current_speed <= stop_speed_threshold:
-				# Successfully arrived and brought vehicle to a controlled stop/park!
 				goal_reached = true
-				reward += 3.0 + alignment * 1.0
+				reward += 5.0 + alignment * 1.0
 			else:
-				# Inside zone but still cruising: encourage linear deceleration
-				reward += 0.08 - (amr.current_speed / maxf(amr.max_speed, 1.0)) * 0.15
+				# Near drop zone but still cruising: encourage linear braking
+				reward += 0.08 - (amr.current_speed / 2.8) * 0.15
 		else:
-			reward -= 0.1
+			reward -= 0.10
 
 	# 6. Wall collision penalty
 	var wall_limit = arena_half_extent - 0.35

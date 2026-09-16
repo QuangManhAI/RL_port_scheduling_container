@@ -72,33 +72,36 @@ func _apply_action(action: Array) -> void:
 	var ang_vel = v_ang * amr.turn_speed
 	amr.set_rl_control(lin_vel, ang_vel)
 
+const GLOBAL_ARENA_HALF_EXTENT: float = 8.0
+const GLOBAL_VECTOR_SPAN: float = 16.0
+
 func _compute_observation() -> Array:
 	var obs: Array = []
 	if not amr or not drop_zone_marker:
 		for i in range(13): obs.append(0.0)
 		return obs
 
-	# 0..3: Local pose
-	var norm_x = clampf(amr.global_position.x / arena_half_extent, -1.0, 1.0)
-	var norm_z = clampf(amr.global_position.z / arena_half_extent, -1.0, 1.0)
+	# 0..3: Local pose normalized to universal 8m half-extent
+	var norm_x = clampf(amr.global_position.x / GLOBAL_ARENA_HALF_EXTENT, -1.0, 1.0)
+	var norm_z = clampf(amr.global_position.z / GLOBAL_ARENA_HALF_EXTENT, -1.0, 1.0)
 	var yaw = amr.rotation.y
 	obs.append(norm_x)
 	obs.append(norm_z)
 	obs.append(sin(yaw))
 	obs.append(cos(yaw))
 
-	# 4..5: Velocities [v_lin/max_speed, v_ang/turn_speed]
-	var norm_v = clampf(amr._manual_linear_vel / maxf(amr.max_speed, 1.0), -1.0, 1.0)
-	var norm_w = clampf(amr._rl_target_v_ang / maxf(amr.turn_speed, 1.0), -1.0, 1.0)
+	# 4..5: Velocities normalized to physical limits [2.8 m/s, 2.2 rad/s]
+	var norm_v = clampf(amr._manual_linear_vel / 2.8, -1.0, 1.0)
+	var norm_w = clampf(amr._manual_angular_vel / 2.2, -1.0, 1.0)
 	obs.append(norm_v)
 	obs.append(norm_w)
 
-	# 6..8: Relative vector to drop zone
+	# 6..8: Relative vector to drop zone normalized to universal 16m metric span
 	var local_rel = amr.global_transform.basis.inverse() * (drop_zone_marker.global_position - amr.global_position)
 	var dist = amr.global_position.distance_to(drop_zone_marker.global_position)
-	obs.append(clampf(local_rel.x / (arena_half_extent * 2.0), -1.0, 1.0))
-	obs.append(clampf(-local_rel.z / (arena_half_extent * 2.0), -1.0, 1.0))
-	obs.append(clampf(dist / (arena_half_extent * 2.0), 0.0, 1.0))
+	obs.append(clampf(local_rel.x / GLOBAL_VECTOR_SPAN, -1.0, 1.0))
+	obs.append(clampf(-local_rel.z / GLOBAL_VECTOR_SPAN, -1.0, 1.0))
+	obs.append(clampf(dist / GLOBAL_VECTOR_SPAN, 0.0, 1.0))
 
 	# 9: Carrying flag
 	var carrying = 1.0 if (amr.get_stowed_box_count() > 0 or amr.held_box != null) else 0.0
@@ -110,7 +113,7 @@ func _compute_observation() -> Array:
 	# 11..12: Wall distances
 	var dist_x = arena_half_extent - abs(amr.global_position.x)
 	var dist_z = arena_half_extent - abs(amr.global_position.z)
-	obs.append(clampf(minf(dist_x, dist_z) / arena_half_extent, 0.0, 1.0))
+	obs.append(clampf(minf(dist_x, dist_z) / GLOBAL_ARENA_HALF_EXTENT, 0.0, 1.0))
 	obs.append(0.0)
 
 	return obs
@@ -124,29 +127,33 @@ func _compute_reward(action: Array) -> float:
 	var forward = -amr.global_transform.basis.z
 	var to_zone = (drop_zone_marker.global_position - amr.global_position).normalized()
 	var alignment = forward.dot(to_zone)
-	reward += maxf(0.0, alignment) * 0.08
+	if alignment >= 0.0:
+		reward += alignment * 0.10
+	else:
+		reward -= 0.10 * abs(alignment)
+
+	# 2. Strict anti-spinning penalty
+	var v_ang: float = float(action[1]) if action.size() > 1 else 0.0
+	reward -= 0.04 * abs(v_ang)
+	if abs(v_ang) > 0.4 and amr._manual_linear_vel < 0.3:
+		reward -= 0.08 * (abs(v_ang) - 0.4)
 
 	# Distance progress shaping toward drop zone
-	reward += (1.5 - minf(dist, 1.5)) * 0.05
+	reward += (1.5 - minf(dist, 1.5)) * 0.08
 	reward -= 0.01 # Time penalty
 
-	# Turning stability penalty (anti-spin)
-	reward -= 0.015 * abs(amr._rl_target_v_ang)
+	# Deceleration shaping near drop point (prevents ramming/overshooting)
+	if dist <= 1.5 and amr.current_speed > 0.6:
+		reward -= 0.06 * (amr.current_speed - 0.6)
 
-	# Soft penalty for driving backwards
-	if amr._manual_linear_vel < -0.1:
-		reward -= 0.05
-
-	# 2. Trigger drop action
-	var in_drop_zone = (dist <= placement_tolerance) and (alignment >= 0.60)
+	# 3. Trigger drop action
+	var in_drop_zone = (dist <= 1.50) and (alignment >= 0.30)
 	if in_drop_zone:
-		# Positive guidance gradient for trigger when safely inside the drop zone
-		reward += maxf(0.0, trigger) * 0.15
+		reward += maxf(0.0, trigger) * 0.20
 
-		if trigger > 0.5 and not is_placed:
-			# Successful placement within drop zone!
+		if (trigger > 0.30 or dist <= 0.80) and not is_placed:
 			is_placed = true
-			reward += 3.0 + maxf(0.0, trigger) * 0.5
+			reward += 8.0 + maxf(0.0, trigger) * 1.5
 			if carried_box and carried_box.get_parent() == amr.cargo_tray:
 				amr.cargo_tray.remove_child(carried_box)
 				add_child(carried_box)
@@ -156,11 +163,10 @@ func _compute_reward(action: Array) -> float:
 				carried_box.angular_velocity = Vector3.ZERO
 				carried_box.freeze = false
 	else:
-		# Premature trigger outside drop zone: soft penalty without terminating episode
-		if trigger > 0.5:
+		if trigger > 0.40 and dist > 1.8:
 			reward -= 0.05
 
-	# 3. Wall collision penalty
+	# 4. Wall collision penalty
 	var wall_limit = arena_half_extent - 0.35
 	if abs(amr.global_position.x) >= wall_limit or abs(amr.global_position.z) >= wall_limit:
 		wall_collided = true

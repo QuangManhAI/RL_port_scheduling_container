@@ -2,18 +2,20 @@ class_name ChainedCycleEnv
 extends TrainingEnvBase
 
 ## Stage S5: Chained Full Cycle Training Environment (S1 -> S2 -> S3 -> S4)
-## Validates end-to-end skill composition across navigate, pickup, carry, and drop-off.
+## Composes modular skills: Navigate-to-Item, Pick-Up, Navigate-while-Carrying, Drop-Off.
+## Implements velocity- and alignment-gated handover across unified 16m metric space.
 
 @export var arena_half_extent: float = 8.0
-@export var force_full_cycle_start: bool = false
 
 @onready var target_box: ToteBox = $TargetBox
 @onready var drop_zone_marker: Node3D = $DropZoneMarker
 
 enum CycleSubStage {
 	NAVIGATE_TO_ITEM = 1,
-	NAVIGATE_CARRYING = 2,
-	CYCLE_COMPLETE = 3
+	PICK_UP = 2,
+	NAVIGATE_CARRYING = 3,
+	DROP_OFF = 4,
+	CYCLE_COMPLETE = 5
 }
 
 var current_sub_stage: CycleSubStage = CycleSubStage.NAVIGATE_TO_ITEM
@@ -24,7 +26,7 @@ var cycle_success: bool = false
 var trigger_attempted: bool = false
 
 func _ready() -> void:
-	max_episode_steps = 300
+	max_episode_steps = 450
 	super._ready()
 
 func _stow_box_in_tray() -> void:
@@ -47,11 +49,12 @@ func _place_box_in_drop_zone() -> void:
 		target_box.angular_velocity = Vector3.ZERO
 		target_box.freeze = false
 
-func _on_arena_reset(seed_val: int, difficulty: float) -> void:
+func _on_arena_reset(seed_val: int, _difficulty: float) -> void:
 	rng.seed = seed_val if seed_val != 0 else Time.get_ticks_usec()
 	wall_collided = false
 	cycle_success = false
 	trigger_attempted = false
+	current_sub_stage = CycleSubStage.NAVIGATE_TO_ITEM
 
 	if amr:
 		amr.reset_robot(Vector3.ZERO, 0.0)
@@ -71,29 +74,18 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 		target_box.angular_velocity = Vector3.ZERO
 		target_box.visible = true
 
-	# Curriculum spawn distribution:
-	# If difficulty < 1.0 and not force_full_cycle_start, 25% chance of starting carrying
-	# so that the single network learns both pick-up and drop-off in parallel.
-	var start_carrying = false
-	if not force_full_cycle_start and difficulty < 1.0:
-		start_carrying = (rng.randf() < 0.25)
-
-	if start_carrying:
-		current_sub_stage = CycleSubStage.NAVIGATE_CARRYING
-		_stow_box_in_tray()
-		SpawnRandomizer.spawn_agent(amr, 4.0, rng)
-		SpawnRandomizer.spawn_drop_zone(drop_zone_marker, amr, arena_half_extent - 1.5, 4.0, rng)
-	else:
-		current_sub_stage = CycleSubStage.NAVIGATE_TO_ITEM
-		SpawnRandomizer.spawn_agent(amr, 3.0, rng)
-		SpawnRandomizer.spawn_target_box(target_box, amr, arena_half_extent - 1.5, 3.5, rng)
-		SpawnRandomizer.spawn_drop_zone(drop_zone_marker, amr, arena_half_extent - 1.5, 5.0, rng)
+	# Standard full-cycle task spawn:
+	# 1. Spawn agent
+	SpawnRandomizer.spawn_agent(amr, 3.0, rng)
+	# 2. Spawn target box >= 3.5m away
+	SpawnRandomizer.spawn_target_box(target_box, amr, arena_half_extent - 1.5, 3.5, rng)
+	# 3. Spawn drop zone >= 5.0m away from agent
+	SpawnRandomizer.spawn_drop_zone(drop_zone_marker, amr, arena_half_extent - 1.5, 5.0, rng)
 
 	prev_sub_goal_dist = _get_dist_to_active_subgoal()
 
 func _get_active_subgoal_pos() -> Vector3:
-	var is_carrying = (amr.get_stowed_box_count() > 0 or amr.held_box != null) if amr else false
-	if not is_carrying:
+	if current_sub_stage in [CycleSubStage.NAVIGATE_TO_ITEM, CycleSubStage.PICK_UP]:
 		return target_box.global_position if target_box else Vector3.ZERO
 	else:
 		return drop_zone_marker.global_position if drop_zone_marker else Vector3.ZERO
@@ -109,9 +101,16 @@ func _apply_action(action: Array) -> void:
 	var v_lin: float = float(action[0]) if action.size() > 0 else 0.0
 	var v_ang: float = float(action[1]) if action.size() > 1 else 0.0
 
-	var lin_vel = v_lin * amr.max_speed
-	var ang_vel = v_ang * amr.turn_speed
+	# Clamp reverse to small docking adjustment (-0.15), prevent high-speed reverse pirouettes
+	v_lin = clampf(v_lin, -0.15, 1.0)
+
+	# Controlled AMR speeds for smooth, stable warehouse docking
+	var lin_vel = v_lin * 2.8 # 2.8 m/s max forward speed
+	var ang_vel = v_ang * 2.2 # 2.2 rad/s max turning speed
 	amr.set_rl_control(lin_vel, ang_vel)
+
+const GLOBAL_ARENA_HALF_EXTENT: float = 8.0
+const GLOBAL_VECTOR_SPAN: float = 16.0
 
 func _compute_observation() -> Array:
 	var obs: Array = []
@@ -119,9 +118,9 @@ func _compute_observation() -> Array:
 		for i in range(13): obs.append(0.0)
 		return obs
 
-	# 0..3: Global arena pose normalized to [-1.0, 1.0] (Zero coordinate jump)
-	var norm_x = clampf(amr.global_position.x / arena_half_extent, -1.0, 1.0)
-	var norm_z = clampf(amr.global_position.z / arena_half_extent, -1.0, 1.0)
+	# 0..3: Global arena pose normalized to universal 8m half-extent
+	var norm_x = clampf(amr.global_position.x / GLOBAL_ARENA_HALF_EXTENT, -1.0, 1.0)
+	var norm_z = clampf(amr.global_position.z / GLOBAL_ARENA_HALF_EXTENT, -1.0, 1.0)
 	var yaw = amr.rotation.y
 	obs.append(norm_x)
 	obs.append(norm_z)
@@ -129,8 +128,8 @@ func _compute_observation() -> Array:
 	obs.append(cos(yaw))
 
 	# 4..5: Normalized velocities [v_lin/max_speed, v_ang/turn_speed]
-	var norm_v = clampf(amr._manual_linear_vel / maxf(amr.max_speed, 1.0), -1.0, 1.0)
-	var norm_w = clampf(amr._rl_target_v_ang / maxf(amr.turn_speed, 1.0), -1.0, 1.0)
+	var norm_v = clampf(amr._manual_linear_vel / 2.8, -1.0, 1.0)
+	var norm_w = clampf(amr._manual_angular_vel / 2.2, -1.0, 1.0)
 	obs.append(norm_v)
 	obs.append(norm_w)
 
@@ -138,22 +137,22 @@ func _compute_observation() -> Array:
 	var sub_pos = _get_active_subgoal_pos()
 	var local_rel = amr.global_transform.basis.inverse() * (sub_pos - amr.global_position)
 	var dist = _get_dist_to_active_subgoal()
-	var norm_scale = arena_half_extent * 2.0
-	obs.append(clampf(local_rel.x / norm_scale, -1.0, 1.0))
-	obs.append(clampf(-local_rel.z / norm_scale, -1.0, 1.0))
-	obs.append(clampf(dist / norm_scale, 0.0, 1.0))
+	obs.append(clampf(local_rel.x / GLOBAL_VECTOR_SPAN, -1.0, 1.0))
+	obs.append(clampf(-local_rel.z / GLOBAL_VECTOR_SPAN, -1.0, 1.0))
+	obs.append(clampf(dist / GLOBAL_VECTOR_SPAN, 0.0, 1.0))
 
 	# 9: Carrying status (0.0 if seeking box, 1.0 if seeking drop zone)
-	var is_carrying = 1.0 if (amr.get_stowed_box_count() > 0 or amr.held_box != null) else 0.0
+	var is_carrying = 1.0 if (current_sub_stage >= CycleSubStage.NAVIGATE_CARRYING) else 0.0
 	obs.append(is_carrying)
 
 	# 10: Lift/tray status (matches carrying flag for single-slot payload)
-	obs.append(is_carrying)
+	var tray_status = 1.0 if (current_sub_stage >= CycleSubStage.NAVIGATE_CARRYING) else 0.0
+	obs.append(tray_status)
 
 	# 11..12: Nearest wall distance
 	var dist_x = arena_half_extent - abs(amr.global_position.x)
 	var dist_z = arena_half_extent - abs(amr.global_position.z)
-	obs.append(clampf(minf(dist_x, dist_z) / arena_half_extent, 0.0, 1.0))
+	obs.append(clampf(minf(dist_x, dist_z) / GLOBAL_ARENA_HALF_EXTENT, 0.0, 1.0))
 	obs.append(0.0)
 
 	return obs
@@ -165,60 +164,79 @@ func _compute_reward(action: Array) -> float:
 
 	var reward: float = 0.0
 	# 1. Continuous potential-based progress reward
-	reward += delta_dist * 2.5
+	reward += delta_dist * 3.0
 	reward -= 0.01 # Time step penalty
-
-	# 2. Anti-spinning turning stability penalty
-	reward -= 0.015 * abs(amr._rl_target_v_ang)
 
 	var forward = -amr.global_transform.basis.z
 	var sub_pos = _get_active_subgoal_pos()
 	var to_subgoal = (sub_pos - amr.global_position).normalized()
 	var alignment = forward.dot(to_subgoal)
 
-	# 3. Heading alignment toward active sub-goal
-	if cur_dist <= 2.5:
-		reward += maxf(0.0, alignment) * 0.05
+	# 2. Strict Anti-Spinning Penalty
+	var v_ang = float(action[1]) if action.size() > 1 else 0.0
+	reward -= 0.04 * abs(v_ang)
 
-	# 4. Soft penalty for driving backwards
-	if amr._manual_linear_vel < -0.1:
-		reward -= 0.03
+	# Severe penalty for spinning in place or pirouetting
+	if abs(v_ang) > 0.4 and amr._manual_linear_vel < 0.3:
+		reward -= 0.08 * (abs(v_ang) - 0.4)
 
-	# 5. Deceleration / controlled approach near target
-	if cur_dist <= 1.4 and abs(amr._manual_linear_vel) > 0.9:
-		reward -= 0.03 * (abs(amr._manual_linear_vel) - 0.9)
+	# 3. Heading alignment reward & penalty for turning away
+	if alignment >= 0.0:
+		reward += alignment * 0.08
+	else:
+		reward -= 0.08 * abs(alignment)
+
+	# 4. Deceleration / controlled approach near target (prevents overshooting!)
+	if cur_dist <= 2.2 and amr.current_speed > 0.8:
+		reward -= 0.08 * (amr.current_speed - 0.8)
 
 	var trigger = float(action[2]) if action.size() > 2 else 0.0
-	var is_carrying = (amr.get_stowed_box_count() > 0 or amr.held_box != null)
+	var amr_speed = amr.current_speed
 
-	if not is_carrying:
-		# Approach & Pick Up Box
-		if cur_dist <= 1.35 and alignment >= 0.40:
-			# Positive guidance gradient for trigger when in grasp range
-			reward += maxf(0.0, trigger) * 0.15
+	match current_sub_stage:
+		CycleSubStage.NAVIGATE_TO_ITEM:
+			# S1 Handover: Gated by distance <= 1.25m, controlled speed <= 0.30 m/s, and alignment >= 0.35
+			# (Fallback: distance <= 0.95m and alignment >= 0.20)
+			if (cur_dist <= 1.25 and amr_speed <= 0.30 and alignment >= 0.35) or (cur_dist <= 0.95 and alignment >= 0.20):
+				current_sub_stage = CycleSubStage.PICK_UP
+				reward += 3.0 + alignment * 1.0
+				prev_sub_goal_dist = cur_dist
 
-			if trigger > 0.40 or cur_dist <= 0.65:
-				_stow_box_in_tray()
-				current_sub_stage = CycleSubStage.NAVIGATE_CARRYING
-				reward += 5.0 + maxf(0.0, trigger) * 0.5
-				prev_sub_goal_dist = _get_dist_to_active_subgoal()
-		elif trigger > 0.50 and cur_dist > 1.8:
-			reward -= 0.05
-	else:
-		# Carry & Drop Off Box
-		if cur_dist <= 1.35 and alignment >= 0.40:
-			# Positive guidance gradient for trigger when inside drop zone
-			reward += maxf(0.0, trigger) * 0.15
+		CycleSubStage.PICK_UP:
+			# S2 Grasp: alignment >= 0.30 and trigger > 0.30 (or bumper contact <= 0.80m)
+			var in_grasp_range = (cur_dist <= 1.50) and (alignment >= 0.30)
+			if in_grasp_range:
+				reward += maxf(0.0, trigger) * 0.20
+				if trigger > 0.30 or cur_dist <= 0.80:
+					_stow_box_in_tray()
+					current_sub_stage = CycleSubStage.NAVIGATE_CARRYING
+					reward += 6.0 + maxf(0.0, trigger) * 1.0
+					prev_sub_goal_dist = _get_dist_to_active_subgoal()
+			elif trigger > 0.40 and cur_dist > 1.8:
+				reward -= 0.05
 
-			if trigger > 0.40 or cur_dist <= 0.65:
-				_place_box_in_drop_zone()
-				cycle_success = true
-				current_sub_stage = CycleSubStage.CYCLE_COMPLETE
-				reward += 10.0 + maxf(0.0, trigger) * 1.0
-		elif trigger > 0.50 and cur_dist > 1.8:
-			reward -= 0.05
+		CycleSubStage.NAVIGATE_CARRYING:
+			# S3 Handover: Gated by distance <= 1.25m, controlled speed <= 0.30 m/s, and alignment >= 0.35
+			# (Fallback: distance <= 0.95m and alignment >= 0.20)
+			if (cur_dist <= 1.25 and amr_speed <= 0.30 and alignment >= 0.35) or (cur_dist <= 0.95 and alignment >= 0.20):
+				current_sub_stage = CycleSubStage.DROP_OFF
+				reward += 3.0 + alignment * 1.0
+				prev_sub_goal_dist = cur_dist
 
-	# 6. Wall collision
+		CycleSubStage.DROP_OFF:
+			# S4 Drop-off: alignment >= 0.30 and trigger > 0.30 (or bumper contact <= 0.80m)
+			var in_drop_range = (cur_dist <= 1.50) and (alignment >= 0.30)
+			if in_drop_range:
+				reward += maxf(0.0, trigger) * 0.20
+				if trigger > 0.30 or cur_dist <= 0.80:
+					_place_box_in_drop_zone()
+					cycle_success = true
+					current_sub_stage = CycleSubStage.CYCLE_COMPLETE
+					reward += 10.0 + maxf(0.0, trigger) * 2.0
+			elif trigger > 0.40 and cur_dist > 1.8:
+				reward -= 0.05
+
+	# 5. Wall collision penalty
 	var wall_limit = arena_half_extent - 0.40
 	if abs(amr.global_position.x) >= wall_limit or abs(amr.global_position.z) >= wall_limit:
 		wall_collided = true
@@ -230,10 +248,16 @@ func _is_terminated() -> bool:
 	return cycle_success or wall_collided
 
 func _get_info() -> Dictionary:
+	var forward: Vector3 = -amr.global_transform.basis.z if amr else Vector3.FORWARD
+	var sub_pos = _get_active_subgoal_pos()
+	var to_subgoal: Vector3 = (sub_pos - amr.global_position).normalized() if amr else Vector3.FORWARD
 	return {
 		"step": step_count,
 		"sub_stage": int(current_sub_stage),
 		"dist_to_subgoal": _get_dist_to_active_subgoal(),
+		"speed": amr.current_speed if amr else 0.0,
+		"alignment": forward.dot(to_subgoal),
+		"is_carrying": (current_sub_stage >= CycleSubStage.NAVIGATE_CARRYING),
 		"cycle_success": cycle_success,
 		"wall_collided": wall_collided
 	}

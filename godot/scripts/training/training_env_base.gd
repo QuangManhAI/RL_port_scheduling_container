@@ -193,9 +193,12 @@ func _apply_action(action: Array) -> void:
 	var v_ang: float = float(action[1]) if action.size() > 1 else 0.0
 	var trigger: float = float(action[2]) if action.size() > 2 else 0.0
 
-	# Map normalized inputs to physical robot velocity
-	var lin_vel = v_lin * amr.max_speed
-	var ang_vel = v_ang * amr.turn_speed
+	# Clamp reverse to small docking adjustment (-0.15), prevent high-speed reverse pirouettes
+	v_lin = clampf(v_lin, -0.15, 1.0)
+
+	# Map normalized inputs to physical robot velocity (standardized across curriculum)
+	var lin_vel = v_lin * 2.8 # 2.8 m/s max forward
+	var ang_vel = v_ang * 2.2 # 2.2 rad/s max turn
 
 	if amr.has_method("set_rl_control"):
 		amr.set_rl_control(lin_vel, ang_vel)
