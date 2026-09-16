@@ -61,3 +61,31 @@ logs/
 # Godot 4
 .godot/
 godot/.godot/
+*.uid
+
+# Scratch
+scratch/
+
+# Tracked model weights — scripts rebuild them
+experiments/checkpoints/*.zip
+experiments/checkpoints/*.pt
+
+# Training run outputs (logs, checkpoints, tensorboard, metrics)
+src/training/logs/
+experiments/runs/*
+
+# Experiment metrics / consolidated outputs
+experiments/metrics/*
+!experiments/metrics/.gitkeep
+
+# Regenerable binary arrays & cached features (scripts rebuild them)
+**/*.npz
+
+# Generated models / weights — never committed
+experiments/results/**/*.pt
+experiments/results/**/*.onnx
+experiments/results/**/*.ckpt
+
+# Database artifacts
+experiments/*.db
+experiments/*.sqlite

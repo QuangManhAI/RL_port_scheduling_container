@@ -86,6 +86,10 @@ var held_box: ToteBox = null
 var _is_arm_tweening: bool = false
 var _was_braking: bool = false
 var _arm_status_text: String = "[WASD] Drive | Click/E: Target Box"
+var is_rl_control: bool = false
+var _rl_target_v_lin: float = 0.0
+var _rl_target_v_ang: float = 0.0
+var _manual_angular_vel: float = 0.0
 
 func _ready() -> void:
 	_led_material = StandardMaterial3D.new()
@@ -115,24 +119,26 @@ func _process(_delta: float) -> void:
 	if is_manual_control:
 		_update_targeting_reticle()
 
-## Physical Sensor Queries for Payload Presence in Cargo Tray
-func is_slot_occupied(slot_idx: int) -> bool:
-	var sensor: Area3D = slot_1_sensor if slot_idx == 0 else slot_2_sensor
-	if not sensor:
-		return false
-	for body in sensor.get_overlapping_bodies():
-		if body is ToteBox and is_instance_valid(body) and body != held_box and body.visible:
-			return true
-	return false
-
+## Physical Sensor & Scene Queries for Payload Presence in Cargo Tray
 func get_slot_box(slot_idx: int) -> ToteBox:
+	var marker: Marker3D = slot_1_marker if slot_idx == 0 else slot_2_marker
+	if cargo_tray:
+		for child in cargo_tray.get_children():
+			if child is ToteBox and is_instance_valid(child) and child != held_box and child.visible:
+				if marker:
+					if child.position.distance_to(marker.position) < 0.35:
+						return child
+				else:
+					return child
 	var sensor: Area3D = slot_1_sensor if slot_idx == 0 else slot_2_sensor
-	if not sensor:
-		return null
-	for body in sensor.get_overlapping_bodies():
-		if body is ToteBox and is_instance_valid(body) and body != held_box and body.visible:
-			return body
+	if sensor:
+		for body in sensor.get_overlapping_bodies():
+			if body is ToteBox and is_instance_valid(body) and body != held_box and body.visible:
+				return body
 	return null
+
+func is_slot_occupied(slot_idx: int) -> bool:
+	return get_slot_box(slot_idx) != null
 
 func get_stowed_box_count() -> int:
 	var count: int = 0
@@ -469,6 +475,7 @@ func execute_dynamic_stow() -> void:
 			cargo_tray.add_child(held_box)
 			held_box.position = slot_marker.position
 			held_box.rotation = Vector3.ZERO
+			held_box.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 			held_box.freeze = true
 			held_box.sleeping = false
 			held_box = null
@@ -534,6 +541,7 @@ func execute_dynamic_place() -> void:
 			held_box.get_parent().remove_child(held_box)
 			_get_world_root().add_child(held_box)
 			held_box.global_transform = final_world_tform
+			held_box.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
 			held_box.freeze = false
 			held_box.sleeping = false
 			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_SLEEPING, false)
@@ -572,6 +580,8 @@ func _fold_arm_to_home_instant() -> void:
 func _physics_process(delta: float) -> void:
 	if is_manual_control:
 		_process_manual_driving(delta)
+	elif is_rl_control:
+		_process_rl_driving(delta)
 	else:
 		if not is_on_floor():
 			velocity.y -= 9.81 * delta
@@ -579,6 +589,70 @@ func _physics_process(delta: float) -> void:
 
 	_update_inactive_arm_animation(delta)
 	_update_stowed_cargo_dynamics(delta)
+
+## Direct velocity and rotation control for Reinforcement Learning
+func set_rl_control(v_lin: float, v_ang: float) -> void:
+	is_rl_control = true
+	is_manual_control = false
+	_rl_target_v_lin = v_lin
+	_rl_target_v_ang = v_ang
+
+## Trigger pick or stow action dynamically via RL policy
+func trigger_rl_action(target_box: ToteBox = null) -> bool:
+	if _is_arm_tweening:
+		return false
+	if held_box == null:
+		if target_box != null:
+			active_target_box = target_box
+		elif active_target_box == null:
+			var boxes = get_tree().get_nodes_in_group("tote_boxes")
+			var closest: ToteBox = null
+			var min_dist: float = 999.0
+			for b in boxes:
+				if b is ToteBox and b.visible and b != held_box:
+					var d = shoulder.global_position.distance_to(b.global_position)
+					if d < min_dist:
+						min_dist = d
+						closest = b
+			if closest and min_dist <= 2.2:
+				active_target_box = closest
+		if active_target_box:
+			_handle_pick_command()
+			return true
+	elif arm_motion_state == ArmMotionState.HELD_READY:
+		execute_dynamic_stow()
+		return true
+	return false
+
+func _process_rl_driving(delta: float) -> void:
+	if _is_arm_tweening:
+		velocity.x = 0.0
+		velocity.z = 0.0
+		move_and_slide()
+		return
+
+	_manual_angular_vel = _rl_target_v_ang
+	rotate_y(_rl_target_v_ang * delta)
+
+	# Active physical braking when decelerating, reversing, or stopping
+	var accel_rate: float = linear_acceleration
+	if abs(_rl_target_v_lin) < 0.05 or (_manual_linear_vel * _rl_target_v_lin < 0.0) or (abs(_rl_target_v_lin) < abs(_manual_linear_vel)):
+		accel_rate = linear_deceleration * 1.5
+
+	_manual_linear_vel = move_toward(_manual_linear_vel, _rl_target_v_lin, accel_rate * delta)
+	if abs(_manual_linear_vel) < 0.03 and abs(_rl_target_v_lin) < 0.05:
+		_manual_linear_vel = 0.0
+
+	current_speed = abs(_manual_linear_vel)
+
+	var forward: Vector3 = -global_transform.basis.z
+	velocity.x = forward.x * _manual_linear_vel
+	velocity.z = forward.z * _manual_linear_vel
+	if not is_on_floor():
+		velocity.y -= 9.81 * delta
+	else:
+		velocity.y = 0.0
+	move_and_slide()
 
 ## Dynamic Idle Breathing and Suspension Compliance for Inactive Resting Arm
 func _update_inactive_arm_animation(delta: float) -> void:
@@ -840,9 +914,14 @@ func reset_robot(spawn_pos: Vector3, spawn_rot_y: float = 0.0) -> void:
 	rotation = Vector3(0.0, spawn_rot_y, 0.0)
 	velocity = Vector3.ZERO
 	_manual_linear_vel = 0.0
+	_manual_angular_vel = 0.0
 	current_speed = 0.0
 	_was_braking = false
 	_is_arm_tweening = false
+	_rl_target_v_lin = 0.0
+	_rl_target_v_ang = 0.0
+	is_manual_control = false
+	is_rl_control = true
 
 	# Release any gripped box
 	if held_box and is_instance_valid(held_box):
