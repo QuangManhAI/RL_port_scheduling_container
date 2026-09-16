@@ -86,6 +86,9 @@ var held_box: ToteBox = null
 var _is_arm_tweening: bool = false
 var _was_braking: bool = false
 var _arm_status_text: String = "[WASD] Drive | Click/E: Target Box"
+var is_rl_control: bool = false
+var _rl_target_v_lin: float = 0.0
+var _rl_target_v_ang: float = 0.0
 
 func _ready() -> void:
 	_led_material = StandardMaterial3D.new()
@@ -572,6 +575,8 @@ func _fold_arm_to_home_instant() -> void:
 func _physics_process(delta: float) -> void:
 	if is_manual_control:
 		_process_manual_driving(delta)
+	elif is_rl_control:
+		_process_rl_driving(delta)
 	else:
 		if not is_on_floor():
 			velocity.y -= 9.81 * delta
@@ -579,6 +584,60 @@ func _physics_process(delta: float) -> void:
 
 	_update_inactive_arm_animation(delta)
 	_update_stowed_cargo_dynamics(delta)
+
+## Direct velocity and rotation control for Reinforcement Learning
+func set_rl_control(v_lin: float, v_ang: float) -> void:
+	is_rl_control = true
+	is_manual_control = false
+	_rl_target_v_lin = v_lin
+	_rl_target_v_ang = v_ang
+
+## Trigger pick or stow action dynamically via RL policy
+func trigger_rl_action(target_box: ToteBox = null) -> bool:
+	if _is_arm_tweening:
+		return false
+	if held_box == null:
+		if target_box != null:
+			active_target_box = target_box
+		elif active_target_box == null:
+			var boxes = get_tree().get_nodes_in_group("tote_boxes")
+			var closest: ToteBox = null
+			var min_dist: float = 999.0
+			for b in boxes:
+				if b is ToteBox and b.visible and b != held_box:
+					var d = shoulder.global_position.distance_to(b.global_position)
+					if d < min_dist:
+						min_dist = d
+						closest = b
+			if closest and min_dist <= 2.2:
+				active_target_box = closest
+		if active_target_box:
+			_handle_pick_command()
+			return true
+	elif arm_motion_state == ArmMotionState.HELD_READY:
+		execute_dynamic_stow()
+		return true
+	return false
+
+func _process_rl_driving(delta: float) -> void:
+	if _is_arm_tweening:
+		velocity.x = 0.0
+		velocity.z = 0.0
+		move_and_slide()
+		return
+
+	rotate_y(_rl_target_v_ang * delta)
+	_manual_linear_vel = move_toward(_manual_linear_vel, _rl_target_v_lin, linear_acceleration * delta)
+	current_speed = abs(_manual_linear_vel)
+
+	var forward: Vector3 = -global_transform.basis.z
+	velocity.x = forward.x * _manual_linear_vel
+	velocity.z = forward.z * _manual_linear_vel
+	if not is_on_floor():
+		velocity.y -= 9.81 * delta
+	else:
+		velocity.y = 0.0
+	move_and_slide()
 
 ## Dynamic Idle Breathing and Suspension Compliance for Inactive Resting Arm
 func _update_inactive_arm_animation(delta: float) -> void:
