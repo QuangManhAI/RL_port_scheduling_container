@@ -631,16 +631,8 @@ func _process_rl_driving(delta: float) -> void:
 		move_and_slide()
 		return
 
-	# Angular acceleration and active braking for turn speed
-	var ang_accel: float = 12.0
-	if abs(_rl_target_v_ang) < 0.05 or (_manual_angular_vel * _rl_target_v_ang < 0.0) or (abs(_rl_target_v_ang) < abs(_manual_angular_vel)):
-		ang_accel = 24.0 # Active angular braking
-
-	_manual_angular_vel = move_toward(_manual_angular_vel, _rl_target_v_ang, ang_accel * delta)
-	if abs(_manual_angular_vel) < 0.05 and abs(_rl_target_v_ang) < 0.05:
-		_manual_angular_vel = 0.0
-
-	rotate_y(_manual_angular_vel * delta)
+	_manual_angular_vel = _rl_target_v_ang
+	rotate_y(_rl_target_v_ang * delta)
 
 	# Active physical braking when decelerating, reversing, or stopping
 	var accel_rate: float = linear_acceleration
