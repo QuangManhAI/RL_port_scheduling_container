@@ -5,7 +5,7 @@ extends TrainingEnvBase
 ## Agent learns fine-approach, drop-zone alignment, and trigger timing to unload box.
 
 @export var arena_half_extent: float = 2.5
-@export var placement_tolerance: float = 0.85
+@export var placement_tolerance: float = 1.10
 
 @onready var drop_zone_marker: Node3D = $DropZoneMarker
 @onready var carried_box: ToteBox = $CarriedBox
@@ -13,8 +13,10 @@ extends TrainingEnvBase
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var is_placed: bool = false
 var failed_attempt: bool = false
+var wall_collided: bool = false
 
 func _ready() -> void:
+	max_episode_steps = 300
 	super._ready()
 	_stow_box_in_slot1()
 
@@ -28,21 +30,24 @@ func _stow_box_in_slot1() -> void:
 			amr.cargo_tray.add_child(carried_box)
 		carried_box.position = amr.slot_1_marker.position
 		carried_box.rotation = Vector3.ZERO
+		carried_box.linear_velocity = Vector3.ZERO
+		carried_box.angular_velocity = Vector3.ZERO
 		carried_box.visible = true
 
 func _on_arena_reset(seed_val: int, _difficulty: float) -> void:
 	rng.seed = seed_val if seed_val != 0 else Time.get_ticks_usec()
 	is_placed = false
 	failed_attempt = false
+	wall_collided = false
 
 	if amr:
 		amr.reset_robot(Vector3.ZERO, 0.0)
 		amr.is_manual_control = false
 		amr.is_rl_control = true
 
-	# 1. Spawn seeded from S3 terminal distribution: robot ~1.0m from zone
-	var offset_x = rng.randf_range(-0.35, 0.35)
-	var offset_z = rng.randf_range(0.95, 1.25)
+	# 1. Spawn seeded from S3 terminal distribution: robot ~0.80 - 1.20m from zone
+	var offset_x = rng.randf_range(-0.30, 0.30)
+	var offset_z = rng.randf_range(0.80, 1.20)
 	var yaw_noise = rng.randf_range(-deg_to_rad(25.0), deg_to_rad(25.0))
 
 	if amr:
@@ -56,6 +61,16 @@ func _on_arena_reset(seed_val: int, _difficulty: float) -> void:
 
 	if drop_zone_marker:
 		drop_zone_marker.global_position = Vector3(0.0, 0.02, 0.0)
+
+func _apply_action(action: Array) -> void:
+	if not amr:
+		return
+	var v_lin: float = float(action[0]) if action.size() > 0 else 0.0
+	var v_ang: float = float(action[1]) if action.size() > 1 else 0.0
+
+	var lin_vel = v_lin * amr.max_speed
+	var ang_vel = v_ang * amr.turn_speed
+	amr.set_rl_control(lin_vel, ang_vel)
 
 func _compute_observation() -> Array:
 	var obs: Array = []
@@ -105,39 +120,63 @@ func _compute_reward(action: Array) -> float:
 	var trigger: float = float(action[2]) if action.size() > 2 else 0.0
 	var dist = amr.global_position.distance_to(drop_zone_marker.global_position)
 
-	# 1. Alignment shaping toward drop zone
+	# 1. Approach alignment shaping toward drop zone
 	var forward = -amr.global_transform.basis.z
 	var to_zone = (drop_zone_marker.global_position - amr.global_position).normalized()
 	var alignment = forward.dot(to_zone)
 	reward += maxf(0.0, alignment) * 0.08
-	reward -= 0.01
+
+	# Distance progress shaping toward drop zone
+	reward += (1.5 - minf(dist, 1.5)) * 0.05
+	reward -= 0.01 # Time penalty
+
+	# Turning stability penalty (anti-spin)
+	reward -= 0.015 * abs(amr._rl_target_v_ang)
+
+	# Soft penalty for driving backwards
+	if amr._manual_linear_vel < -0.1:
+		reward -= 0.05
 
 	# 2. Trigger drop action
-	if trigger > 0.5:
-		if dist <= placement_tolerance and alignment >= 0.6:
+	var in_drop_zone = (dist <= placement_tolerance) and (alignment >= 0.60)
+	if in_drop_zone:
+		# Positive guidance gradient for trigger when safely inside the drop zone
+		reward += maxf(0.0, trigger) * 0.15
+
+		if trigger > 0.5 and not is_placed:
 			# Successful placement within drop zone!
 			is_placed = true
-			reward += 2.5
+			reward += 3.0 + maxf(0.0, trigger) * 0.5
 			if carried_box and carried_box.get_parent() == amr.cargo_tray:
-				# Place box down into drop zone
 				amr.cargo_tray.remove_child(carried_box)
-				get_parent().add_child(carried_box)
+				add_child(carried_box)
 				carried_box.global_position = drop_zone_marker.global_position + Vector3(0.0, 0.16, 0.0)
+				carried_box.rotation = Vector3.ZERO
+				carried_box.linear_velocity = Vector3.ZERO
+				carried_box.angular_velocity = Vector3.ZERO
 				carried_box.freeze = false
-		else:
-			# Premature or misaligned drop
-			failed_attempt = true
-			reward -= 0.5
+	else:
+		# Premature trigger outside drop zone: soft penalty without terminating episode
+		if trigger > 0.5:
+			reward -= 0.05
+
+	# 3. Wall collision penalty
+	var wall_limit = arena_half_extent - 0.35
+	if abs(amr.global_position.x) >= wall_limit or abs(amr.global_position.z) >= wall_limit:
+		wall_collided = true
+		reward -= 2.0
 
 	return reward
 
 func _is_terminated() -> bool:
-	return is_placed or failed_attempt
+	return is_placed or wall_collided
 
 func _get_info() -> Dictionary:
 	return {
 		"step": step_count,
+		"distance_to_zone": amr.global_position.distance_to(drop_zone_marker.global_position) if (amr and drop_zone_marker) else 0.0,
 		"is_placed": is_placed,
 		"failed_attempt": failed_attempt,
+		"wall_collided": wall_collided,
 		"terminal_pose": [amr.global_position.x, amr.global_position.z, amr.rotation.y] if is_placed else []
 	}
