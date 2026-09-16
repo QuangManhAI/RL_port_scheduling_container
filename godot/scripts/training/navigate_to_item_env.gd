@@ -5,7 +5,7 @@ extends TrainingEnvBase
 ## Agent learns spatial approach, orientation alignment, and goal distance keeping.
 
 @export var arena_half_extent: float = 6.0
-@export var grasp_reach_threshold: float = 1.05
+@export var grasp_reach_threshold: float = 1.20
 @export var stop_speed_threshold: float = 0.30
 
 @onready var target_box: ToteBox = $TargetBox
@@ -21,25 +21,23 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 	goal_reached = false
 	wall_collided = false
 
-	# 1. Reset AMR state
 	if amr:
 		amr.reset_robot(Vector3.ZERO, 0.0)
 		amr.is_manual_control = false
 		amr.is_rl_control = true
-		amr.held_box = null
 
-	# 2. Randomize spawn
+	# 1. Spawn agent
 	SpawnRandomizer.spawn_agent(amr, arena_half_extent, rng)
-	var min_dist = DifficultyRamp.get_min_box_distance(difficulty, 2.0, 5.5)
-	SpawnRandomizer.spawn_target_box(target_box, amr, arena_half_extent, min_dist, rng)
+
+	# 2. Spawn target box >= 2.5m away
+	SpawnRandomizer.spawn_target_box(target_box, amr, arena_half_extent, 2.5, rng)
 
 	prev_distance_to_box = _get_current_distance_to_box()
 
 func _get_current_distance_to_box() -> float:
 	if not amr or not target_box:
 		return 999.0
-	var amr_arm_pos = amr.shoulder.global_position if amr.shoulder else amr.global_position
-	return amr_arm_pos.distance_to(target_box.global_position)
+	return amr.global_position.distance_to(target_box.global_position)
 
 func _compute_observation() -> Array:
 	var obs: Array = []
@@ -47,7 +45,7 @@ func _compute_observation() -> Array:
 		for i in range(13): obs.append(0.0)
 		return obs
 
-	# 0..3: Local pose [x/half_extent, z/half_extent, sin(yaw), cos(yaw)]
+	# 0..3: Local pose
 	var norm_x = clampf(amr.global_position.x / arena_half_extent, -1.0, 1.0)
 	var norm_z = clampf(amr.global_position.z / arena_half_extent, -1.0, 1.0)
 	var yaw = amr.rotation.y
@@ -62,29 +60,28 @@ func _compute_observation() -> Array:
 	obs.append(norm_v)
 	obs.append(norm_w)
 
-	# 6..8: Relative vector to box (in robot local frame) [dx, dz, distance]
+	# 6..8: Relative vector to box (in robot local frame)
 	var local_rel = amr.global_transform.basis.inverse() * (target_box.global_position - amr.global_position)
-	var dist = _get_current_distance_to_box()
+	var dist = amr.global_position.distance_to(target_box.global_position)
 	obs.append(clampf(local_rel.x / (arena_half_extent * 2.0), -1.0, 1.0))
-	obs.append(clampf(-local_rel.z / (arena_half_extent * 2.0), -1.0, 1.0)) # Forward offset in body frame
+	obs.append(clampf(-local_rel.z / (arena_half_extent * 2.0), -1.0, 1.0))
 	obs.append(clampf(dist / (arena_half_extent * 2.0), 0.0, 1.0))
 
-	# 9: Carrying flag (0.0)
+	# 9: Carrying status = 0.0
 	obs.append(0.0)
 
-	# 10: Lift/tray status (0.0)
+	# 10: Lift/tray status = 0.0
 	obs.append(0.0)
 
-	# 11..12: Nearest wall distance & relative angle
+	# 11..12: Wall distances
 	var dist_x = arena_half_extent - abs(amr.global_position.x)
 	var dist_z = arena_half_extent - abs(amr.global_position.z)
-	var min_wall_dist = minf(dist_x, dist_z)
-	obs.append(clampf(min_wall_dist / arena_half_extent, 0.0, 1.0))
-	obs.append(0.0) # Angle to nearest obstacle
+	obs.append(clampf(minf(dist_x, dist_z) / arena_half_extent, 0.0, 1.0))
+	obs.append(0.0)
 
 	return obs
 
-func _compute_reward(action: Array) -> float:
+func _compute_reward(_action: Array) -> float:
 	var cur_dist = _get_current_distance_to_box()
 	var delta_dist = prev_distance_to_box - cur_dist
 	prev_distance_to_box = cur_dist
@@ -107,15 +104,27 @@ func _compute_reward(action: Array) -> float:
 	if amr._manual_linear_vel < -0.1:
 		reward -= 0.05
 
-	# 4. Success bonus on arrival (requires facing box within ~70 degrees and coming to a controlled stop)
+	# 4. Turn stability penalty: discourage erratic spinning/swerving
+	reward -= 0.015 * abs(amr._rl_target_v_ang)
+
+	# 5. Advance approach deceleration profile within 2.5m (prevents overshooting and orbiting)
+	if cur_dist <= 2.5:
+		var target_approach_speed: float = clampf(cur_dist / 2.5, 0.15, 1.0) * amr.max_speed
+		if amr.current_speed > target_approach_speed:
+			reward -= 0.04 * ((amr.current_speed - target_approach_speed) / amr.max_speed)
+
+	# 6. Success bonus on arrival (requires facing box within ~70 degrees and coming to a controlled stop)
 	if cur_dist <= grasp_reach_threshold:
+		# Penalize spinning inside the arrival zone (eliminates pirouette exploit)
+		reward -= 0.03 * abs(amr._rl_target_v_ang)
+
 		if alignment >= 0.35:
 			if amr.current_speed <= stop_speed_threshold:
 				goal_reached = true
 				reward += 3.0 + alignment * 1.0
 			else:
-				# Near box but still cruising: encourage deceleration
-				reward += 0.08 - (amr.current_speed / maxf(amr.max_speed, 1.0)) * 0.12
+				# Near box but still cruising: encourage linear deceleration
+				reward += 0.08 - (amr.current_speed / maxf(amr.max_speed, 1.0)) * 0.15
 		else:
 			reward -= 0.1
 
@@ -131,8 +140,17 @@ func _is_terminated() -> bool:
 	return goal_reached or wall_collided
 
 func _get_info() -> Dictionary:
+	var forward: Vector3 = -amr.global_transform.basis.z if amr else Vector3.FORWARD
+	var to_box: Vector3 = (target_box.global_position - amr.global_position).normalized() if (amr and target_box) else Vector3.FORWARD
 	return {
 		"step": step_count,
+		"amr_pos": [amr.global_position.x, amr.global_position.y, amr.global_position.z] if amr else [],
+		"target_pos": [target_box.global_position.x, target_box.global_position.y, target_box.global_position.z] if target_box else [],
+		"amr_yaw": amr.rotation.y if amr else 0.0,
+		"speed": amr.current_speed if amr else 0.0,
+		"linear_vel": amr._manual_linear_vel if amr else 0.0,
+		"angular_vel": amr._rl_target_v_ang if amr else 0.0,
+		"alignment": forward.dot(to_box),
 		"distance_to_box": _get_current_distance_to_box(),
 		"goal_reached": goal_reached,
 		"wall_collided": wall_collided,

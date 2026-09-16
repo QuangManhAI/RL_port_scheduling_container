@@ -122,19 +122,28 @@ func _compute_reward(_action: Array) -> float:
 	if amr._manual_linear_vel < -0.1:
 		reward -= 0.05
 
-	# 4. Soft stability penalty: discourage erratic turning while carrying cargo
-	reward -= 0.005 * abs(amr._rl_target_v_ang)
+	# 4. Turn stability penalty: discourage erratic turning while carrying cargo
+	reward -= 0.015 * abs(amr._rl_target_v_ang)
 
-	# 5. Arrival and controlled stopping bonus
+	# 5. Advance approach deceleration profile within 2.5m (prevents overshooting and orbiting)
+	if cur_dist <= 2.5:
+		var target_approach_speed: float = clampf(cur_dist / 2.5, 0.15, 1.0) * amr.max_speed
+		if amr.current_speed > target_approach_speed:
+			reward -= 0.04 * ((amr.current_speed - target_approach_speed) / amr.max_speed)
+
+	# 6. Arrival and controlled stopping bonus
 	if cur_dist <= arrival_threshold:
+		# Penalize spinning inside the arrival zone (eliminates pirouette exploit)
+		reward -= 0.03 * abs(amr._rl_target_v_ang)
+
 		if alignment >= 0.35:
 			if amr.current_speed <= stop_speed_threshold:
 				# Successfully arrived and brought vehicle to a controlled stop/park!
 				goal_reached = true
 				reward += 3.0 + alignment * 1.0
 			else:
-				# Inside zone but still cruising: encourage deceleration
-				reward += 0.08 - (amr.current_speed / maxf(amr.max_speed, 1.0)) * 0.12
+				# Inside zone but still cruising: encourage linear deceleration
+				reward += 0.08 - (amr.current_speed / maxf(amr.max_speed, 1.0)) * 0.15
 		else:
 			reward -= 0.1
 
@@ -150,8 +159,17 @@ func _is_terminated() -> bool:
 	return goal_reached or wall_collided
 
 func _get_info() -> Dictionary:
+	var forward: Vector3 = -amr.global_transform.basis.z if amr else Vector3.FORWARD
+	var to_zone: Vector3 = (drop_zone_marker.global_position - amr.global_position).normalized() if (amr and drop_zone_marker) else Vector3.FORWARD
 	return {
 		"step": step_count,
+		"amr_pos": [amr.global_position.x, amr.global_position.y, amr.global_position.z] if amr else [],
+		"target_pos": [drop_zone_marker.global_position.x, drop_zone_marker.global_position.y, drop_zone_marker.global_position.z] if drop_zone_marker else [],
+		"amr_yaw": amr.rotation.y if amr else 0.0,
+		"speed": amr.current_speed if amr else 0.0,
+		"linear_vel": amr._manual_linear_vel if amr else 0.0,
+		"angular_vel": amr._rl_target_v_ang if amr else 0.0,
+		"alignment": forward.dot(to_zone),
 		"distance_to_box": _get_current_distance_to_zone(),
 		"distance_to_zone": _get_current_distance_to_zone(),
 		"goal_reached": goal_reached,
