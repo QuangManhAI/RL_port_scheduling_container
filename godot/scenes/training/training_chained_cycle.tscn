@@ -1,8 +1,26 @@
-[gd_scene load_steps=12 format=3 uid="uid://dmxtrain_s5_001"]
+[gd_scene load_steps=16 format=3 uid="uid://dmxtrain_s5_001"]
 
 [ext_resource type="Script" path="res://scripts/training/chained_cycle_env.gd" id="1_env"]
 [ext_resource type="PackedScene" path="res://scenes/entities/amr_robot.tscn" id="2_amr"]
 [ext_resource type="PackedScene" path="res://scenes/environment/tote_box.tscn" id="3_box"]
+[ext_resource type="Script" path="res://scripts/training/training_camera.gd" id="4_cam"]
+[ext_resource type="PackedScene" path="res://scenes/training/training_hud.tscn" id="5_hud"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_s5"]
+sky_top_color = Color(0.55, 0.72, 0.95, 1)
+sky_horizon_color = Color(0.82, 0.88, 0.95, 1)
+ground_bottom_color = Color(0.78, 0.8, 0.85, 1)
+
+[sub_resource type="Sky" id="Sky_s5"]
+sky_material = SubResource("ProceduralSkyMaterial_s5")
+
+[sub_resource type="Environment" id="Environment_s5"]
+background_mode = 2
+sky = SubResource("Sky_s5")
+ambient_light_source = 2
+ambient_light_color = Color(0.85, 0.88, 0.92, 1)
+ambient_light_energy = 0.6
+tonemap_mode = 2
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
 size = Vector3(18, 0.4, 18)
@@ -43,9 +61,14 @@ height = 0.04
 [node name="TrainingChainedCycle" type="Node3D"]
 script = ExtResource("1_env")
 
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_s5")
+
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 10, 20, 10)
 light_energy = 0.95
+shadow_enabled = true
+shadow_blur = 1.5
 
 [node name="ArenaFloor" type="StaticBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.2, 0)
@@ -101,3 +124,12 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0.02, -4)
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="DropZoneMarker"]
 mesh = SubResource("CylinderMesh_dropzone")
+
+[node name="TrainingCamera" type="Camera3D" parent="." node_paths=PackedStringArray("target_node")]
+transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 14, 14)
+current = true
+script = ExtResource("4_cam")
+target_node = NodePath("../AMR_Robot")
+default_distance = 18.0
+
+[node name="TrainingHUD" parent="." instance=ExtResource("5_hud")]

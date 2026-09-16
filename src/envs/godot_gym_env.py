@@ -35,6 +35,7 @@ class GodotGymEnv(gym.Env):
         self.port = port
         self.ticks_per_step = ticks_per_step
         self.headless = headless
+        self.autostart = autostart
 
         # Action Space: [v_lin, v_ang, lift_trigger]
         self.action_space = spaces.Box(
@@ -63,7 +64,7 @@ class GodotGymEnv(gym.Env):
                 port=self.port,
                 ticks_per_step=self.ticks_per_step,
                 headless=self.headless,
-                autostart=True,
+                autostart=self.autostart,
             )
 
     def reset(

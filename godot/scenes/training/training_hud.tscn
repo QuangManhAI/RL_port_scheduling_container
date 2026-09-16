@@ -1,0 +1,58 @@
+[gd_scene load_steps=2 format=3 uid="uid://dmxtrain_hud_001"]
+
+[ext_resource type="Script" path="res://scripts/training/training_hud.gd" id="1_hud"]
+
+[node name="TrainingHUD" type="CanvasLayer"]
+script = ExtResource("1_hud")
+
+[node name="Margin" type="MarginContainer" parent="."]
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 700.0
+offset_bottom = 120.0
+
+[node name="VBox" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="TitleLabel" type="Label" parent="Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.9, 0.95, 1.0, 1.0)
+text = "STAGE 1: NAVIGATE TO ITEM (RL TRAINING)"
+
+[node name="StatusLabel" type="Label" parent="Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.9, 0.7, 0.2, 1.0)
+text = "○ TCP Server Listening on 127.0.0.1:11000 | Waiting for Python..."
+
+[node name="TelemetryLabel" type="Label" parent="Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.75, 0.8, 0.85, 1.0)
+text = "AMR Pose: (0.0, 0.0) | Yaw: 0.0° | Lin Vel: 0.0 m/s | Dist: 0.0m | Step: 0"
+
+[node name="ControlsLabel" type="Label" parent="Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.5, 0.55, 0.6, 1.0)
+text = "[C] Toggle Follow/Overview | [R] Reset Camera | [RMB Drag] Orbit | [Wheel] Zoom"
+
+[node name="BannerLabel" type="Label" parent="."]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -300.0
+offset_top = -40.0
+offset_right = 300.0
+offset_bottom = 40.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(0.2, 1.0, 0.4, 1.0)
+text = "🎯 GOAL REACHED! (Grasp Achieved)"
+horizontal_alignment = 1
+vertical_alignment = 1

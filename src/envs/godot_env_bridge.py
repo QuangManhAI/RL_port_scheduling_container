@@ -156,6 +156,17 @@ class GodotEnvBridge:
 
         if autostart:
             self.start()
+        else:
+            self.connect_existing()
+
+    def connect_existing(self, timeout: float = 25.0) -> None:
+        """Connect to an externally running Godot instance (e.g., Godot Editor F6)."""
+        self.client = GodotTCPClient(host="127.0.0.1", port=self.port, timeout=timeout)
+        try:
+            self.client.connect()
+        except Exception as e:
+            self.close()
+            raise RuntimeError(f"Failed to connect to running Godot instance on port {self.port}: {e}")
 
     def start(self) -> None:
         """Spawn Godot process and connect TCP client."""

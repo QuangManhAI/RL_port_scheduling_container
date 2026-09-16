@@ -61,6 +61,7 @@ logs/
 # Godot 4
 .godot/
 godot/.godot/
+*.uid
 
 # RL Training Logs & Checkpoints
 src/training/logs/
