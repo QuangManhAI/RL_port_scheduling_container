@@ -116,6 +116,7 @@ func _handle_client_message(msg: Dictionary) -> void:
 	var cmd = msg.get("command", "")
 	match cmd:
 		"reset":
+			_is_processing_step = true
 			var seed_val: int = int(msg.get("seed", 0))
 			current_difficulty = float(msg.get("difficulty", 0.0))
 			step_count = 0
@@ -135,6 +136,7 @@ func _handle_client_message(msg: Dictionary) -> void:
 				"observation": obs,
 				"info": info
 			})
+			_is_processing_step = false
 
 		"step":
 			_is_processing_step = true

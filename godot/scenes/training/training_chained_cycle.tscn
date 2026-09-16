@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3 uid="uid://dmxtrain_s5_001"]
+[gd_scene load_steps=18 format=3 uid="uid://dmxtrain_s5_001"]
 
 [ext_resource type="Script" path="res://scripts/training/chained_cycle_env.gd" id="1_env"]
 [ext_resource type="PackedScene" path="res://scenes/entities/amr_robot.tscn" id="2_amr"]
@@ -32,6 +32,12 @@ roughness = 0.8
 [sub_resource type="BoxMesh" id="BoxMesh_floor"]
 material = SubResource("StandardMaterial3D_floor")
 size = Vector3(18, 0.4, 18)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ns"]
+size = Vector3(18, 1.2, 0.4)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ew"]
+size = Vector3(0.4, 1.2, 18)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wall"]
 albedo_color = Color(0.2, 0.22, 0.25, 1)
@@ -87,28 +93,28 @@ collision_mask = 15
 
 [node name="WallNorth" type="CollisionShape3D" parent="ArenaWalls"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, -8.2)
-shape = SubResource("BoxShape3D_floor")
+shape = SubResource("BoxShape3D_wall_ns")
 
 [node name="MeshNorth" type="MeshInstance3D" parent="ArenaWalls/WallNorth"]
 mesh = SubResource("BoxMesh_wall_ns")
 
 [node name="WallSouth" type="CollisionShape3D" parent="ArenaWalls"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 8.2)
-shape = SubResource("BoxShape3D_floor")
+shape = SubResource("BoxShape3D_wall_ns")
 
 [node name="MeshSouth" type="MeshInstance3D" parent="ArenaWalls/WallSouth"]
 mesh = SubResource("BoxMesh_wall_ns")
 
 [node name="WallEast" type="CollisionShape3D" parent="ArenaWalls"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.2, 0.6, 0)
-shape = SubResource("BoxShape3D_floor")
+shape = SubResource("BoxShape3D_wall_ew")
 
 [node name="MeshEast" type="MeshInstance3D" parent="ArenaWalls/WallEast"]
 mesh = SubResource("BoxMesh_wall_ew")
 
 [node name="WallWest" type="CollisionShape3D" parent="ArenaWalls"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.2, 0.6, 0)
-shape = SubResource("BoxShape3D_floor")
+shape = SubResource("BoxShape3D_wall_ew")
 
 [node name="MeshWest" type="MeshInstance3D" parent="ArenaWalls/WallWest"]
 mesh = SubResource("BoxMesh_wall_ew")

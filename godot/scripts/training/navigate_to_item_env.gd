@@ -65,7 +65,7 @@ func _compute_observation() -> Array:
 	var local_rel = amr.global_transform.basis.inverse() * (target_box.global_position - amr.global_position)
 	var dist = _get_current_distance_to_box()
 	obs.append(clampf(local_rel.x / (arena_half_extent * 2.0), -1.0, 1.0))
-	obs.append(clampf(local_rel.z / (arena_half_extent * 2.0), -1.0, 1.0))
+	obs.append(clampf(-local_rel.z / (arena_half_extent * 2.0), -1.0, 1.0)) # Forward offset in body frame
 	obs.append(clampf(dist / (arena_half_extent * 2.0), 0.0, 1.0))
 
 	# 9: Carrying flag (0.0)
@@ -91,27 +91,34 @@ func _compute_reward(action: Array) -> float:
 	var reward: float = 0.0
 
 	# 1. Potential-based distance progress shaping
-	reward += delta_dist * 2.5
+	reward += delta_dist * 3.0
 
 	# 2. Time step penalty
 	reward -= 0.01
 
-	# 3. Small alignment bonus when closing in
-	if cur_dist <= 2.0:
-		var forward = -amr.global_transform.basis.z
-		var to_box = (target_box.global_position - amr.global_position).normalized()
-		var alignment = forward.dot(to_box)
-		reward += maxf(0.0, alignment) * 0.05
+	# 3. Orientation alignment shaping (facing box)
+	var forward = -amr.global_transform.basis.z
+	var to_box = (target_box.global_position - amr.global_position).normalized()
+	var alignment = forward.dot(to_box)
+	reward += alignment * 0.03
 
-	# 4. Success bonus on arrival
+	# Soft penalty for driving backwards
+	if amr._manual_linear_vel < -0.1:
+		reward -= 0.05
+
+	# 4. Success bonus on arrival (requires facing box within ~70 degrees)
 	if cur_dist <= grasp_reach_threshold:
-		goal_reached = true
-		reward += 1.0
+		if alignment >= 0.35:
+			goal_reached = true
+			reward += 2.0 + alignment * 1.0
+		else:
+			reward -= 0.1
 
 	# 5. Wall collision penalty
-	if abs(amr.global_position.x) >= (arena_half_extent - 0.4) or abs(amr.global_position.z) >= (arena_half_extent - 0.4):
+	var wall_limit = arena_half_extent - 0.35
+	if abs(amr.global_position.x) >= wall_limit or abs(amr.global_position.z) >= wall_limit:
 		wall_collided = true
-		reward -= 1.0
+		reward -= 2.0
 
 	return reward
 

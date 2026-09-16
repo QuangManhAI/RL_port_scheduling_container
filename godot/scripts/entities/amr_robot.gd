@@ -902,6 +902,10 @@ func reset_robot(spawn_pos: Vector3, spawn_rot_y: float = 0.0) -> void:
 	current_speed = 0.0
 	_was_braking = false
 	_is_arm_tweening = false
+	_rl_target_v_lin = 0.0
+	_rl_target_v_ang = 0.0
+	is_manual_control = false
+	is_rl_control = true
 
 	# Release any gripped box
 	if held_box and is_instance_valid(held_box):

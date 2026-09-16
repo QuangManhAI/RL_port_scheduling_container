@@ -190,7 +190,7 @@ class GodotEnvBridge:
         self.process = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
         )
 
         # Connect TCP client

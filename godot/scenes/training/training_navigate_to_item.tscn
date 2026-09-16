@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3 uid="uid://bbx2l83lhq4aw"]
+[gd_scene load_steps=16 format=3 uid="uid://bbx2l83lhq4aw"]
 
 [ext_resource type="Script" path="res://scripts/training/navigate_to_item_env.gd" id="1_env"]
 [ext_resource type="PackedScene" path="res://scenes/entities/amr_robot.tscn" id="2_amr"]
@@ -33,6 +33,12 @@ roughness = 0.75
 material = SubResource("StandardMaterial3D_floor")
 size = Vector3(14, 0.4, 14)
 
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ns"]
+size = Vector3(14, 1.2, 0.4)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ew"]
+size = Vector3(0.4, 1.2, 14)
+
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wall"]
 albedo_color = Color(0.24, 0.27, 0.32, 1)
 roughness = 0.85
@@ -59,6 +65,7 @@ shadow_blur = 1.5
 
 [node name="ArenaFloor" type="StaticBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.2, 0)
+collision_layer = 1
 collision_mask = 15
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="ArenaFloor"]
@@ -68,32 +75,33 @@ shape = SubResource("BoxShape3D_floor")
 mesh = SubResource("BoxMesh_floor")
 
 [node name="ArenaWalls" type="StaticBody3D" parent="."]
+collision_layer = 1
 collision_mask = 15
 
 [node name="WallNorth" type="CollisionShape3D" parent="ArenaWalls"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, -6.2)
-shape = SubResource("BoxShape3D_floor")
+shape = SubResource("BoxShape3D_wall_ns")
 
 [node name="MeshNorth" type="MeshInstance3D" parent="ArenaWalls/WallNorth"]
 mesh = SubResource("BoxMesh_wall_ns")
 
 [node name="WallSouth" type="CollisionShape3D" parent="ArenaWalls"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 6.2)
-shape = SubResource("BoxShape3D_floor")
+shape = SubResource("BoxShape3D_wall_ns")
 
 [node name="MeshSouth" type="MeshInstance3D" parent="ArenaWalls/WallSouth"]
 mesh = SubResource("BoxMesh_wall_ns")
 
 [node name="WallEast" type="CollisionShape3D" parent="ArenaWalls"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.2, 0.6, 0)
-shape = SubResource("BoxShape3D_floor")
+shape = SubResource("BoxShape3D_wall_ew")
 
 [node name="MeshEast" type="MeshInstance3D" parent="ArenaWalls/WallEast"]
 mesh = SubResource("BoxMesh_wall_ew")
 
 [node name="WallWest" type="CollisionShape3D" parent="ArenaWalls"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.2, 0.6, 0)
-shape = SubResource("BoxShape3D_floor")
+shape = SubResource("BoxShape3D_wall_ew")
 
 [node name="MeshWest" type="MeshInstance3D" parent="ArenaWalls/WallWest"]
 mesh = SubResource("BoxMesh_wall_ew")

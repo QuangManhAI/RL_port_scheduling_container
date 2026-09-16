@@ -50,10 +50,10 @@ def main() -> None:
     parser.add_argument("--stage", type=str, default="s1", choices=list(STAGE_MAP.keys()), help="Stage to view")
     parser.add_argument("--model", type=str, default="", help="Path to PPO model .zip (defaults to stage final checkpoint)")
     parser.add_argument("--port", type=int, default=11000, help="TCP port for Godot bridge")
-    parser.add_argument("--fps", type=float, default=15.0, help="Simulation playback rate (actions per second)")
+    parser.add_argument("--fps", type=float, default=120.0, help="Simulation playback rate (actions per second)")
     parser.add_argument("--connect", action="store_true", help="Connect to already-running Godot Editor instance (F6) instead of spawning a new window")
-    parser.add_argument("--episodes", type=int, default=10, help="Number of episodes to run (0 for infinite)")
-    parser.add_argument("--difficulty", type=float, default=0.0, help="Curriculum difficulty (0.0 to 1.0)")
+    parser.add_argument("--episodes", type=int, default=30, help="Number of episodes to run (0 for infinite)")
+    parser.add_argument("--difficulty", type=float, default=0, help="Curriculum difficulty (0.0 to 1.0)")
 
     args = parser.parse_args()
 
