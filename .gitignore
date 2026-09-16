@@ -63,5 +63,8 @@ logs/
 godot/.godot/
 *.uid
 
+# Scratch
+scratch/
+
 # RL Training Logs & Checkpoints
 src/training/logs/

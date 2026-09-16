@@ -218,13 +218,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.06, 0.425)
 shape = SubResource("BoxShape3D_tray_rail_end")
 
 [node name="Slot1Marker" type="Marker3D" parent="Chassis/CargoTray"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.16, -0.22)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.17, -0.22)
 
 [node name="Slot2Marker" type="Marker3D" parent="Chassis/CargoTray"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.16, 0.22)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.17, 0.22)
 
 [node name="Slot1Sensor" type="Area3D" parent="Chassis/CargoTray"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.16, -0.22)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.17, -0.22)
 collision_layer = 0
 collision_mask = 8
 
@@ -232,7 +232,7 @@ collision_mask = 8
 shape = SubResource("BoxShape3D_slot_sensor")
 
 [node name="Slot2Sensor" type="Area3D" parent="Chassis/CargoTray"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.16, 0.22)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.17, 0.22)
 collision_layer = 0
 collision_mask = 8
 

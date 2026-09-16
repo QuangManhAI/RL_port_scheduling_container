@@ -6,6 +6,7 @@ extends TrainingEnvBase
 
 @export var arena_half_extent: float = 6.0
 @export var arrival_threshold: float = 1.20
+@export var stop_speed_threshold: float = 0.30
 
 @onready var drop_zone_marker: Node3D = $DropZoneMarker
 @onready var carried_box: ToteBox = $CarriedBox
@@ -14,6 +15,22 @@ var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var prev_distance_to_zone: float = 0.0
 var goal_reached: bool = false
 var wall_collided: bool = false
+
+func _ready() -> void:
+	super._ready()
+	_stow_box_in_slot1()
+
+func _stow_box_in_slot1() -> void:
+	if carried_box and amr and amr.slot_1_marker and amr.cargo_tray:
+		carried_box.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+		carried_box.freeze = true
+		if carried_box.get_parent() != amr.cargo_tray:
+			if carried_box.get_parent():
+				carried_box.get_parent().remove_child(carried_box)
+			amr.cargo_tray.add_child(carried_box)
+		carried_box.position = amr.slot_1_marker.position
+		carried_box.rotation = Vector3.ZERO
+		carried_box.visible = true
 
 func _on_arena_reset(seed_val: int, _difficulty: float) -> void:
 	rng.seed = seed_val if seed_val != 0 else Time.get_ticks_usec()
@@ -29,13 +46,7 @@ func _on_arena_reset(seed_val: int, _difficulty: float) -> void:
 	SpawnRandomizer.spawn_agent(amr, arena_half_extent, rng)
 
 	# 2. Stow box directly in AMR tray slot 1
-	if carried_box and amr and amr.slot_1_marker:
-		carried_box.freeze = true
-		if carried_box.get_parent() != amr.cargo_tray:
-			carried_box.get_parent().remove_child(carried_box)
-			amr.cargo_tray.add_child(carried_box)
-		carried_box.transform = amr.slot_1_marker.transform
-		carried_box.visible = true
+	_stow_box_in_slot1()
 
 	# 3. Spawn drop zone marker >= 3.0m away
 	SpawnRandomizer.spawn_drop_zone(drop_zone_marker, amr, arena_half_extent, 3.0, rng)
@@ -114,11 +125,16 @@ func _compute_reward(_action: Array) -> float:
 	# 4. Soft stability penalty: discourage erratic turning while carrying cargo
 	reward -= 0.005 * abs(amr._rl_target_v_ang)
 
-	# 5. Arrival bonus
+	# 5. Arrival and controlled stopping bonus
 	if cur_dist <= arrival_threshold:
 		if alignment >= 0.35:
-			goal_reached = true
-			reward += 2.0 + alignment * 1.0
+			if amr.current_speed <= stop_speed_threshold:
+				# Successfully arrived and brought vehicle to a controlled stop/park!
+				goal_reached = true
+				reward += 3.0 + alignment * 1.0
+			else:
+				# Inside zone but still cruising: encourage deceleration
+				reward += 0.08 - (amr.current_speed / maxf(amr.max_speed, 1.0)) * 0.12
 		else:
 			reward -= 0.1
 

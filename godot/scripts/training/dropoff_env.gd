@@ -14,6 +14,22 @@ var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var is_placed: bool = false
 var failed_attempt: bool = false
 
+func _ready() -> void:
+	super._ready()
+	_stow_box_in_slot1()
+
+func _stow_box_in_slot1() -> void:
+	if carried_box and amr and amr.slot_1_marker and amr.cargo_tray:
+		carried_box.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+		carried_box.freeze = true
+		if carried_box.get_parent() != amr.cargo_tray:
+			if carried_box.get_parent():
+				carried_box.get_parent().remove_child(carried_box)
+			amr.cargo_tray.add_child(carried_box)
+		carried_box.position = amr.slot_1_marker.position
+		carried_box.rotation = Vector3.ZERO
+		carried_box.visible = true
+
 func _on_arena_reset(seed_val: int, _difficulty: float) -> void:
 	rng.seed = seed_val if seed_val != 0 else Time.get_ticks_usec()
 	is_placed = false
@@ -36,13 +52,7 @@ func _on_arena_reset(seed_val: int, _difficulty: float) -> void:
 		amr.set_rl_control(0.0, 0.0)
 
 	# 2. Stow box in tray
-	if carried_box and amr and amr.slot_1_marker:
-		carried_box.freeze = true
-		if carried_box.get_parent() != amr.cargo_tray:
-			carried_box.get_parent().remove_child(carried_box)
-			amr.cargo_tray.add_child(carried_box)
-		carried_box.transform = amr.slot_1_marker.transform
-		carried_box.visible = true
+	_stow_box_in_slot1()
 
 	if drop_zone_marker:
 		drop_zone_marker.global_position = Vector3(0.0, 0.02, 0.0)

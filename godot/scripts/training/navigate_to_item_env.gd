@@ -6,6 +6,7 @@ extends TrainingEnvBase
 
 @export var arena_half_extent: float = 6.0
 @export var grasp_reach_threshold: float = 1.05
+@export var stop_speed_threshold: float = 0.30
 
 @onready var target_box: ToteBox = $TargetBox
 @onready var walls_node: Node3D = $ArenaWalls
@@ -106,11 +107,15 @@ func _compute_reward(action: Array) -> float:
 	if amr._manual_linear_vel < -0.1:
 		reward -= 0.05
 
-	# 4. Success bonus on arrival (requires facing box within ~70 degrees)
+	# 4. Success bonus on arrival (requires facing box within ~70 degrees and coming to a controlled stop)
 	if cur_dist <= grasp_reach_threshold:
 		if alignment >= 0.35:
-			goal_reached = true
-			reward += 2.0 + alignment * 1.0
+			if amr.current_speed <= stop_speed_threshold:
+				goal_reached = true
+				reward += 3.0 + alignment * 1.0
+			else:
+				# Near box but still cruising: encourage deceleration
+				reward += 0.08 - (amr.current_speed / maxf(amr.max_speed, 1.0)) * 0.12
 		else:
 			reward -= 0.1
 

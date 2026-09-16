@@ -118,24 +118,26 @@ func _process(_delta: float) -> void:
 	if is_manual_control:
 		_update_targeting_reticle()
 
-## Physical Sensor Queries for Payload Presence in Cargo Tray
-func is_slot_occupied(slot_idx: int) -> bool:
-	var sensor: Area3D = slot_1_sensor if slot_idx == 0 else slot_2_sensor
-	if not sensor:
-		return false
-	for body in sensor.get_overlapping_bodies():
-		if body is ToteBox and is_instance_valid(body) and body != held_box and body.visible:
-			return true
-	return false
-
+## Physical Sensor & Scene Queries for Payload Presence in Cargo Tray
 func get_slot_box(slot_idx: int) -> ToteBox:
+	var marker: Marker3D = slot_1_marker if slot_idx == 0 else slot_2_marker
+	if cargo_tray:
+		for child in cargo_tray.get_children():
+			if child is ToteBox and is_instance_valid(child) and child != held_box and child.visible:
+				if marker:
+					if child.position.distance_to(marker.position) < 0.35:
+						return child
+				else:
+					return child
 	var sensor: Area3D = slot_1_sensor if slot_idx == 0 else slot_2_sensor
-	if not sensor:
-		return null
-	for body in sensor.get_overlapping_bodies():
-		if body is ToteBox and is_instance_valid(body) and body != held_box and body.visible:
-			return body
+	if sensor:
+		for body in sensor.get_overlapping_bodies():
+			if body is ToteBox and is_instance_valid(body) and body != held_box and body.visible:
+				return body
 	return null
+
+func is_slot_occupied(slot_idx: int) -> bool:
+	return get_slot_box(slot_idx) != null
 
 func get_stowed_box_count() -> int:
 	var count: int = 0
@@ -472,6 +474,7 @@ func execute_dynamic_stow() -> void:
 			cargo_tray.add_child(held_box)
 			held_box.position = slot_marker.position
 			held_box.rotation = Vector3.ZERO
+			held_box.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 			held_box.freeze = true
 			held_box.sleeping = false
 			held_box = null
@@ -537,6 +540,7 @@ func execute_dynamic_place() -> void:
 			held_box.get_parent().remove_child(held_box)
 			_get_world_root().add_child(held_box)
 			held_box.global_transform = final_world_tform
+			held_box.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
 			held_box.freeze = false
 			held_box.sleeping = false
 			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_SLEEPING, false)

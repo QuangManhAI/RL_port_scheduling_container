@@ -129,7 +129,7 @@ mesh = SubResource("CylinderMesh_dropzone")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 0)
 
 [node name="CarriedBox" parent="." instance=ExtResource("3_box")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0.45, -0.4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0.47, 0.03)
 
 [node name="TrainingCamera" type="Camera3D" parent="." node_paths=PackedStringArray("target_node")]
 transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 10, 10)
