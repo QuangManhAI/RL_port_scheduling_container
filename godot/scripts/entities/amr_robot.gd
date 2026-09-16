@@ -38,8 +38,8 @@ const COLOR_CHARGING: Color = Color(0.1, 0.9, 0.4)     # Emerald (Charging)
 @export var battery_level: float = 100.0
 @export var current_task_str: String = "STANDBY"
 @export var is_manual_control: bool = false
-@export var linear_acceleration: float = 9.0
-@export var linear_deceleration: float = 14.0
+@export var linear_acceleration: float = 24.0
+@export var linear_deceleration: float = 32.0
 @export var turn_speed: float = 3.2
 
 @onready var arm: Node3D = $RoboticArm
