@@ -41,9 +41,13 @@ func load_from_json(path: String) -> bool:
 	print("[NeuralPolicy] Loaded native policy from: %s" % path)
 	return true
 
-## High-speed forward pass: Linear(13->64) -> Tanh -> Linear(64->64) -> Tanh -> Linear(64->3)
+## High-speed forward pass: Linear(in_dim->64) -> Tanh -> Linear(64->64) -> Tanh -> Linear(64->3)
 func predict(obs: Array) -> Array:
-	if not is_loaded or obs.size() < 13:
+	if not is_loaded or obs.is_empty():
+		return [0.0, 0.0, 0.0]
+
+	var in_dim: int = w0[0].size() if w0.size() > 0 else 13
+	if obs.size() < in_dim:
 		return [0.0, 0.0, 0.0]
 
 	# Hidden Layer 1 (64 neurons)
@@ -51,7 +55,7 @@ func predict(obs: Array) -> Array:
 	for i in range(64):
 		var sum_val: float = float(b0[i])
 		var row: Array = w0[i]
-		for j in range(13):
+		for j in range(in_dim):
 			sum_val += float(row[j]) * float(obs[j])
 		h1.append(tanh(sum_val))
 

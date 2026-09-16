@@ -30,6 +30,7 @@ from src.envs.dropoff_env import DropoffEnv
 from src.envs.navigate_carrying_env import NavigateCarryingEnv
 from src.envs.navigate_to_item_env import NavigateToItemEnv
 from src.envs.pickup_env import PickupEnv
+from src.envs.rack_docking_gym_env import RackDockingGymEnv
 
 STAGE_MAP = {
     "s1": (NavigateToItemEnv, "src/training/logs/checkpoints/ppo_s1_final.zip"),
@@ -42,6 +43,8 @@ STAGE_MAP = {
     "dropoff": (DropoffEnv, "src/training/logs/checkpoints/ppo_s4_final.zip"),
     "s5": (ChainedCycleEnv, "src/training/logs/checkpoints/ppo_s5_final.zip"),
     "chained_cycle": (ChainedCycleEnv, "src/training/logs/checkpoints/ppo_s5_final.zip"),
+    "r1": (RackDockingGymEnv, "src/training/logs/checkpoints/ppo_r1_final.zip"),
+    "rack_docking": (RackDockingGymEnv, "src/training/logs/checkpoints/ppo_r1_final.zip"),
 }
 
 
@@ -119,7 +122,7 @@ def main() -> None:
                 obs, reward, terminated, truncated, info = env.step(action)
                 ep_reward += float(reward)
 
-                dist = info.get("distance_to_box", 0.0)
+                dist = info.get("distance_to_box", info.get("dist_to_target", info.get("dist_to_subgoal", 0.0)))
                 v_lin = float(action[0])
                 v_ang = float(action[1])
                 trig = float(action[2]) if len(action) > 2 else 0.0
@@ -138,7 +141,12 @@ def main() -> None:
 
                 if terminated or truncated:
                     elapsed = time.time() - t_start
-                    goal = info.get("goal_reached", False) or info.get("is_picked", False) or info.get("is_placed", False)
+                    goal = (
+                        info.get("goal_reached", False)
+                        or info.get("is_picked", False)
+                        or info.get("is_placed", False)
+                        or info.get("docking_success", False)
+                    )
                     col = info.get("wall_collided", False)
 
                     if goal:
