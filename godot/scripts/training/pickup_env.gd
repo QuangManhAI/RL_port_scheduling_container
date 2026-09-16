@@ -10,13 +10,15 @@ extends TrainingEnvBase
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var is_picked: bool = false
 var failed_attempt: bool = false
-var pick_hold_timer: float = 0.0
+var wall_collided: bool = false
+var trigger_attempted: bool = false
 
 func _on_arena_reset(seed_val: int, _difficulty: float) -> void:
 	rng.seed = seed_val if seed_val != 0 else Time.get_ticks_usec()
 	is_picked = false
 	failed_attempt = false
-	pick_hold_timer = 0.0
+	wall_collided = false
+	trigger_attempted = false
 
 	# 1. Reset AMR
 	if amr:
@@ -25,9 +27,19 @@ func _on_arena_reset(seed_val: int, _difficulty: float) -> void:
 		amr.is_rl_control = true
 		amr.held_box = null
 
-	# 2. Spawn seeded from S1 terminal distribution: robot ~1.0m from box
-	var offset_x = rng.randf_range(-0.35, 0.35)
-	var offset_z = rng.randf_range(-1.2, -0.85)
+	# 2. Reset Box at origin
+	if target_box:
+		target_box.freeze = true
+		target_box.global_position = Vector3(0.0, 0.16, 0.0)
+		target_box.rotation = Vector3.ZERO
+		target_box.linear_velocity = Vector3.ZERO
+		target_box.angular_velocity = Vector3.ZERO
+		target_box.visible = true
+
+	# 3. Spawn seeded from S1 terminal distribution: robot in front of box ~0.95 - 1.25m away
+	# Box is at (0, 0.16, 0). Robot facing -Z towards box is placed at +Z.
+	var offset_x = rng.randf_range(-0.30, 0.30)
+	var offset_z = rng.randf_range(0.95, 1.25)
 	var yaw_noise = rng.randf_range(-deg_to_rad(25.0), deg_to_rad(25.0))
 
 	if amr:
@@ -36,13 +48,20 @@ func _on_arena_reset(seed_val: int, _difficulty: float) -> void:
 		amr.velocity = Vector3.ZERO
 		amr.set_rl_control(0.0, 0.0)
 
-	if target_box:
-		target_box.freeze = true
-		target_box.global_position = Vector3(0.0, 0.16, 0.0)
-		target_box.rotation = Vector3.ZERO
-		target_box.linear_velocity = Vector3.ZERO
-		target_box.angular_velocity = Vector3.ZERO
-		target_box.visible = true
+func _apply_action(action: Array) -> void:
+	if not amr:
+		return
+	var v_lin: float = float(action[0]) if action.size() > 0 else 0.0
+	var v_ang: float = float(action[1]) if action.size() > 1 else 0.0
+	var trigger: float = float(action[2]) if action.size() > 2 else 0.0
+
+	var lin_vel = v_lin * amr.max_speed
+	var ang_vel = v_ang * amr.turn_speed
+	amr.set_rl_control(lin_vel, ang_vel)
+
+	if trigger > 0.5 and not trigger_attempted:
+		trigger_attempted = true
+		amr.trigger_rl_action(target_box)
 
 func _compute_observation() -> Array:
 	var obs: Array = []
@@ -68,9 +87,9 @@ func _compute_observation() -> Array:
 	# 6..8: Relative vector to box (in robot local frame)
 	var local_rel = amr.global_transform.basis.inverse() * (target_box.global_position - amr.global_position)
 	var dist = amr.global_position.distance_to(target_box.global_position)
-	obs.append(clampf(local_rel.x / arena_half_extent, -1.0, 1.0))
-	obs.append(clampf(local_rel.z / arena_half_extent, -1.0, 1.0))
-	obs.append(clampf(dist / arena_half_extent, 0.0, 1.0))
+	obs.append(clampf(local_rel.x / (arena_half_extent * 2.0), -1.0, 1.0))
+	obs.append(clampf(-local_rel.z / (arena_half_extent * 2.0), -1.0, 1.0))
+	obs.append(clampf(dist / (arena_half_extent * 2.0), 0.0, 1.0))
 
 	# 9: Carrying status (1.0 if held, else 0.0)
 	obs.append(1.0 if amr.held_box != null else 0.0)
@@ -102,31 +121,38 @@ func _compute_reward(action: Array) -> float:
 	reward += (1.5 - minf(dist, 1.5)) * 0.05
 	reward -= 0.01 # Time penalty
 
-	# 2. Trigger evaluation
-	if trigger > 0.5:
-		if amr.held_box != null or amr.get_stowed_box_count() > 0:
-			# Successful pick!
-			is_picked = true
-			reward += 2.5
-		elif dist > 1.8 or alignment < 0.6:
-			# Premature or misaligned trigger attempt
+	# Soft penalty for driving backwards
+	if amr._manual_linear_vel < -0.1:
+		reward -= 0.05
+
+	# 2. Premature trigger penalty
+	if trigger > 0.5 and not is_picked:
+		if dist > 1.8 or alignment < 0.6:
 			failed_attempt = true
 			reward -= 0.5
 
-	# Check if box is successfully held
-	if amr.held_box != null or amr.get_stowed_box_count() > 0:
+	# 3. Successful pick bonus
+	if (amr.held_box != null or amr.get_stowed_box_count() > 0) and not is_picked:
 		is_picked = true
-		reward += 0.1
+		reward += 2.5
+
+	# 4. Wall collision penalty
+	var wall_limit = arena_half_extent - 0.35
+	if abs(amr.global_position.x) >= wall_limit or abs(amr.global_position.z) >= wall_limit:
+		wall_collided = true
+		reward -= 2.0
 
 	return reward
 
 func _is_terminated() -> bool:
-	return is_picked or failed_attempt
+	return is_picked or failed_attempt or wall_collided
 
 func _get_info() -> Dictionary:
 	return {
 		"step": step_count,
+		"distance_to_box": amr.global_position.distance_to(target_box.global_position) if (amr and target_box) else 0.0,
 		"is_picked": is_picked,
 		"failed_attempt": failed_attempt,
+		"wall_collided": wall_collided,
 		"terminal_pose": [amr.global_position.x, amr.global_position.z, amr.rotation.y] if is_picked else []
 	}

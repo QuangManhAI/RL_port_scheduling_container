@@ -26,7 +26,7 @@ func _on_arena_reset(seed_val: int, _difficulty: float) -> void:
 
 	# 1. Spawn seeded from S3 terminal distribution: robot ~1.0m from zone
 	var offset_x = rng.randf_range(-0.35, 0.35)
-	var offset_z = rng.randf_range(-1.2, -0.85)
+	var offset_z = rng.randf_range(0.95, 1.25)
 	var yaw_noise = rng.randf_range(-deg_to_rad(25.0), deg_to_rad(25.0))
 
 	if amr:
@@ -71,9 +71,9 @@ func _compute_observation() -> Array:
 	# 6..8: Relative vector to drop zone
 	var local_rel = amr.global_transform.basis.inverse() * (drop_zone_marker.global_position - amr.global_position)
 	var dist = amr.global_position.distance_to(drop_zone_marker.global_position)
-	obs.append(clampf(local_rel.x / arena_half_extent, -1.0, 1.0))
-	obs.append(clampf(local_rel.z / arena_half_extent, -1.0, 1.0))
-	obs.append(clampf(dist / arena_half_extent, 0.0, 1.0))
+	obs.append(clampf(local_rel.x / (arena_half_extent * 2.0), -1.0, 1.0))
+	obs.append(clampf(-local_rel.z / (arena_half_extent * 2.0), -1.0, 1.0))
+	obs.append(clampf(dist / (arena_half_extent * 2.0), 0.0, 1.0))
 
 	# 9: Carrying flag
 	var carrying = 1.0 if (amr.get_stowed_box_count() > 0 or amr.held_box != null) else 0.0

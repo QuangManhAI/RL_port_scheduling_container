@@ -50,7 +50,7 @@ def main() -> None:
     parser.add_argument("--stage", type=str, default="s1", choices=list(STAGE_MAP.keys()), help="Stage to view")
     parser.add_argument("--model", type=str, default="", help="Path to PPO model .zip (defaults to stage final checkpoint)")
     parser.add_argument("--port", type=int, default=11000, help="TCP port for Godot bridge")
-    parser.add_argument("--fps", type=float, default=120.0, help="Simulation playback rate (actions per second)")
+    parser.add_argument("--fps", type=float, default=300.0, help="Simulation playback rate (actions per second)")
     parser.add_argument("--connect", action="store_true", help="Connect to already-running Godot Editor instance (F6) instead of spawning a new window")
     parser.add_argument("--episodes", type=int, default=30, help="Number of episodes to run (0 for infinite)")
     parser.add_argument("--difficulty", type=float, default=0, help="Curriculum difficulty (0.0 to 1.0)")
@@ -122,10 +122,14 @@ def main() -> None:
                 dist = info.get("distance_to_box", 0.0)
                 v_lin = float(action[0])
                 v_ang = float(action[1])
+                trig = float(action[2]) if len(action) > 2 else 0.0
 
                 # Live terminal telemetry
+                act_str = f"v={v_lin:+.2f}, w={v_ang:+.2f}"
+                if len(action) > 2:
+                    act_str += f", trig={trig:+.2f}"
                 sys.stdout.write(
-                    f"\rStep: {step:3d} | Dist to Target: {dist:5.2f}m | Action: [v={v_lin:+.2f}, w={v_ang:+.2f}] | Ep Reward: {ep_reward:+6.2f}"
+                    f"\rStep: {step:3d} | Dist to Target: {dist:5.2f}m | Action: [{act_str}] | Ep Reward: {ep_reward:+6.2f}"
                 )
                 sys.stdout.flush()
 

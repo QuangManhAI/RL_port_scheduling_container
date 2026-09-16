@@ -71,7 +71,7 @@ func _compute_observation() -> Array:
 	var local_rel = amr.global_transform.basis.inverse() * (drop_zone_marker.global_position - amr.global_position)
 	var dist = _get_current_distance_to_zone()
 	obs.append(clampf(local_rel.x / (arena_half_extent * 2.0), -1.0, 1.0))
-	obs.append(clampf(local_rel.z / (arena_half_extent * 2.0), -1.0, 1.0))
+	obs.append(clampf(-local_rel.z / (arena_half_extent * 2.0), -1.0, 1.0))
 	obs.append(clampf(dist / (arena_half_extent * 2.0), 0.0, 1.0))
 
 	# 9: Carrying flag = 1.0
