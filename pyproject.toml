@@ -3,15 +3,22 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "project-name"
+name = "rl-port-scheduling-container"
 version = "0.1.0"
-description = "Deep learning project — modular packages, script-only training, full-state checkpointing, analysis notebooks."
+description = "Gymnasium-style reinforcement learning simulation for container port yard scheduling."
 readme = "README.md"
 requires-python = ">=3.11, <3.13"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*"]
+include = ["src*", "port_sim*"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.5.0",
+    "mypy>=1.10.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -24,7 +31,7 @@ markers = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py39"
 # Frozen one-shot experiment scripts carry legacy lint debt; they are excluded
 # from strict maintained architecture lint checks.
 extend-exclude = [
@@ -42,6 +49,6 @@ ignore = ["E501"]
 "src/experiments/*.py" = ["E402"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.9"
 warn_unused_ignores = true
 ignore_missing_imports = true
