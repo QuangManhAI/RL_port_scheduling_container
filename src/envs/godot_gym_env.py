@@ -83,10 +83,11 @@ class GodotGymEnv(gym.Env):
         raw_obs, info = self.bridge.reset(seed=seed_val, difficulty=difficulty)
 
         obs = np.array(raw_obs, dtype=np.float32)
-        if obs.shape != (13,):
-            # Pad or truncate if needed
-            padded = np.zeros(13, dtype=np.float32)
-            padded[: min(13, len(obs))] = obs[:13]
+        expected_shape = self.observation_space.shape
+        if obs.shape != expected_shape:
+            padded = np.zeros(expected_shape, dtype=np.float32)
+            n = min(len(padded), len(obs))
+            padded[:n] = obs[:n]
             obs = padded
 
         return obs, info
@@ -97,9 +98,11 @@ class GodotGymEnv(gym.Env):
         raw_obs, reward, terminated, truncated, info = self.bridge.step(act_list)
 
         obs = np.array(raw_obs, dtype=np.float32)
-        if obs.shape != (13,):
-            padded = np.zeros(13, dtype=np.float32)
-            padded[: min(13, len(obs))] = obs[:13]
+        expected_shape = self.observation_space.shape
+        if obs.shape != expected_shape:
+            padded = np.zeros(expected_shape, dtype=np.float32)
+            n = min(len(padded), len(obs))
+            padded[:n] = obs[:n]
             obs = padded
 
         return obs, float(reward), terminated, truncated, info

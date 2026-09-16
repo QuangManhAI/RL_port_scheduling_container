@@ -20,7 +20,7 @@ var current_difficulty: float = 0.0
 var is_client_connected: bool = false
 var _is_processing_step: bool = false
 
-@onready var amr: AmrRobot = $AMR_Robot
+@onready var amr: AmrRobot = get_node_or_null("AMR_Robot")
 
 func _ready() -> void:
 	# Ensure this environment controller continues running even when the rest of the scene is paused
