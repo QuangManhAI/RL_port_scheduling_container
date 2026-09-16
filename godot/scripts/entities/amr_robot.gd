@@ -627,7 +627,16 @@ func _process_rl_driving(delta: float) -> void:
 		return
 
 	rotate_y(_rl_target_v_ang * delta)
-	_manual_linear_vel = move_toward(_manual_linear_vel, _rl_target_v_lin, linear_acceleration * delta)
+
+	# Active physical braking when decelerating, reversing, or stopping
+	var accel_rate: float = linear_acceleration
+	if abs(_rl_target_v_lin) < 0.05 or (_manual_linear_vel * _rl_target_v_lin < 0.0) or (abs(_rl_target_v_lin) < abs(_manual_linear_vel)):
+		accel_rate = linear_deceleration * 1.5
+
+	_manual_linear_vel = move_toward(_manual_linear_vel, _rl_target_v_lin, accel_rate * delta)
+	if abs(_manual_linear_vel) < 0.03 and abs(_rl_target_v_lin) < 0.05:
+		_manual_linear_vel = 0.0
+
 	current_speed = abs(_manual_linear_vel)
 
 	var forward: Vector3 = -global_transform.basis.z
