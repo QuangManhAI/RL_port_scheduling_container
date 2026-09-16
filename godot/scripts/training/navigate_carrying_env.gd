@@ -5,7 +5,7 @@ extends TrainingEnvBase
 ## Agent learns smooth transit while carrying physical payload in cargo tray.
 
 @export var arena_half_extent: float = 6.0
-@export var arrival_threshold: float = 1.0
+@export var arrival_threshold: float = 1.20
 
 @onready var drop_zone_marker: Node3D = $DropZoneMarker
 @onready var carried_box: ToteBox = $CarriedBox
@@ -37,8 +37,8 @@ func _on_arena_reset(seed_val: int, _difficulty: float) -> void:
 		carried_box.transform = amr.slot_1_marker.transform
 		carried_box.visible = true
 
-	# 3. Spawn drop zone marker >= 3.5m away
-	SpawnRandomizer.spawn_drop_zone(drop_zone_marker, amr, arena_half_extent, 3.5, rng)
+	# 3. Spawn drop zone marker >= 3.0m away
+	SpawnRandomizer.spawn_drop_zone(drop_zone_marker, amr, arena_half_extent, 3.0, rng)
 	prev_distance_to_zone = _get_current_distance_to_zone()
 
 func _get_current_distance_to_zone() -> float:
@@ -96,23 +96,37 @@ func _compute_reward(_action: Array) -> float:
 	var reward: float = 0.0
 
 	# 1. Progress shaping toward drop zone
-	reward += delta_dist * 2.5
+	reward += delta_dist * 3.5
 
 	# 2. Time penalty
 	reward -= 0.01
 
-	# 3. Soft stability penalty: discourage erratic turning while carrying cargo
-	reward -= 0.02 * abs(amr._rl_target_v_ang)
+	# 3. Orientation alignment shaping (facing drop zone)
+	var forward = -amr.global_transform.basis.z
+	var to_zone = (drop_zone_marker.global_position - amr.global_position).normalized()
+	var alignment = forward.dot(to_zone)
+	reward += alignment * 0.03
 
-	# 4. Arrival bonus
+	# Soft penalty for driving backwards
+	if amr._manual_linear_vel < -0.1:
+		reward -= 0.05
+
+	# 4. Soft stability penalty: discourage erratic turning while carrying cargo
+	reward -= 0.005 * abs(amr._rl_target_v_ang)
+
+	# 5. Arrival bonus
 	if cur_dist <= arrival_threshold:
-		goal_reached = true
-		reward += 1.0
+		if alignment >= 0.35:
+			goal_reached = true
+			reward += 2.0 + alignment * 1.0
+		else:
+			reward -= 0.1
 
-	# 5. Wall collision penalty
-	if abs(amr.global_position.x) >= (arena_half_extent - 0.4) or abs(amr.global_position.z) >= (arena_half_extent - 0.4):
+	# 6. Wall collision penalty
+	var wall_limit = arena_half_extent - 0.35
+	if abs(amr.global_position.x) >= wall_limit or abs(amr.global_position.z) >= wall_limit:
 		wall_collided = true
-		reward -= 1.0
+		reward -= 2.0
 
 	return reward
 
@@ -122,6 +136,7 @@ func _is_terminated() -> bool:
 func _get_info() -> Dictionary:
 	return {
 		"step": step_count,
+		"distance_to_box": _get_current_distance_to_zone(),
 		"distance_to_zone": _get_current_distance_to_zone(),
 		"goal_reached": goal_reached,
 		"wall_collided": wall_collided,
