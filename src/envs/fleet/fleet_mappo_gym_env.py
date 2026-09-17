@@ -16,8 +16,10 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
-# Ensure project root is in sys.path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from pathlib import Path
+project_root = str(Path(__file__).resolve().parents[3])
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from src.envs.godot_env_bridge import GodotEnvBridge
 from src.utils.config_loader import get_clock_config
