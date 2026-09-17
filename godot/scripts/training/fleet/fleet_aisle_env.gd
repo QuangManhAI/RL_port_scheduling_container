@@ -53,10 +53,20 @@ var total_fleet_delivered: int = 0
 var fleet_deadlock_timer: float = 0.0
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
-# Global metrics for normalization
 const GLOBAL_SPAN_XZ: float = 20.0
 const MAX_LINEAR_SPEED: float = 2.80
 const MAX_ANGULAR_SPEED: float = 2.20
+
+const TOTE_SLOT_DEFS: Array[Dictionary] = [
+	{"tier": 1, "side": "L", "side_val": -1.0, "offset": Vector3(-0.36, 0.56, -0.60)},
+	{"tier": 1, "side": "R", "side_val": 1.0, "offset": Vector3(0.36, 0.56, -0.60)},
+	{"tier": 2, "side": "L", "side_val": -1.0, "offset": Vector3(-0.36, 1.11, -0.60)},
+	{"tier": 2, "side": "R", "side_val": 1.0, "offset": Vector3(0.36, 1.11, -0.60)},
+	{"tier": 3, "side": "L", "side_val": -1.0, "offset": Vector3(-0.36, 1.67, -0.60)},
+	{"tier": 3, "side": "R", "side_val": 1.0, "offset": Vector3(0.36, 1.67, -0.60)},
+	{"tier": 4, "side": "L", "side_val": -1.0, "offset": Vector3(-0.36, 2.23, -0.60)},
+	{"tier": 4, "side": "R", "side_val": 1.0, "offset": Vector3(0.36, 2.23, -0.60)},
+]
 
 func _ready() -> void:
 	max_episode_steps = 1200
@@ -108,10 +118,35 @@ func _on_arena_reset(seed_val: int, _difficulty: float) -> void:
 		rack_south.global_position = Vector3(0.0, 0.02, 4.0)
 		rack_south.rotation = Vector3.ZERO # Faces north (-Z)
 
-	# Reset All Boxes
-	for b in all_boxes:
-		if is_instance_valid(b):
-			b.reset_box()
+	# Reset North Rack Boxes onto physical shelves
+	for i in range(min(boxes_north.size(), TOTE_SLOT_DEFS.size())):
+		var b = boxes_north[i]
+		var s_def = TOTE_SLOT_DEFS[i]
+		var world_pos = rack_north.to_global(s_def["offset"]) if rack_north else (Vector3(0.0, 0.0, -4.0) + s_def["offset"])
+		b.visible = true
+		b.freeze = true
+		b.linear_velocity = Vector3.ZERO
+		b.angular_velocity = Vector3.ZERO
+		if b.get_parent() != boxes_north_root:
+			b.get_parent().remove_child(b)
+			boxes_north_root.add_child(b)
+		b.global_position = world_pos
+		b.global_rotation = rack_north.global_rotation if rack_north else Vector3(0.0, PI, 0.0)
+
+	# Reset South Rack Boxes onto physical shelves
+	for i in range(min(boxes_south.size(), TOTE_SLOT_DEFS.size())):
+		var b = boxes_south[i]
+		var s_def = TOTE_SLOT_DEFS[i]
+		var world_pos = rack_south.to_global(s_def["offset"]) if rack_south else (Vector3(0.0, 0.0, 4.0) + s_def["offset"])
+		b.visible = true
+		b.freeze = true
+		b.linear_velocity = Vector3.ZERO
+		b.angular_velocity = Vector3.ZERO
+		if b.get_parent() != boxes_south_root:
+			b.get_parent().remove_child(b)
+			boxes_south_root.add_child(b)
+		b.global_position = world_pos
+		b.global_rotation = rack_south.global_rotation if rack_south else Vector3.ZERO
 
 	# Reset Conveyor
 	if conveyor and conveyor.has_method("reset_conveyor"):
@@ -145,6 +180,9 @@ func _on_arena_reset(seed_val: int, _difficulty: float) -> void:
 		a._manual_angular_vel = 0.0
 		a._rl_target_v_lin = 0.0
 		a._rl_target_v_ang = 0.0
+		a.is_rl_control = true
+		a.is_manual_control = false
+		a.arm_tween_speed_scale = 3.5
 		a.held_box = null
 		a._clear_cargo_tray()
 		a._fold_arm_to_home_instant()
@@ -184,7 +222,7 @@ func _apply_action(action: Array) -> void:
 		# Scale continuous actions to physical kinematic limits
 		var target_v = v_lin * MAX_LINEAR_SPEED
 		var target_w = v_ang * MAX_ANGULAR_SPEED
-		a.set_rl_action(target_v, target_w)
+		a.set_rl_control(target_v, target_w)
 
 ## Compute Decentralized 37-D Observations for all AMRs
 func _compute_observation() -> Array:

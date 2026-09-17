@@ -33,6 +33,38 @@ SUB_STAGE_NAMES = {
 }
 
 
+def compute_fleet_navigation_action(obs_agent: np.ndarray, agent_idx: int) -> np.ndarray:
+    """Proactive goal-directed navigation with mutual yielding and obstacle avoidance."""
+    local_dx = float(obs_agent[6]) * 20.0
+    local_dz = float(obs_agent[7]) * 20.0
+    dist_to_goal = np.hypot(local_dx, local_dz)
+
+    # Calculate desired angular rate to face sub-goal
+    target_heading_err = np.arctan2(local_dx, -local_dz)
+    w_cmd = float(np.clip(target_heading_err * 2.2, -1.0, 1.0))
+
+    # Calculate linear velocity (throttle down when turning sharply)
+    if abs(target_heading_err) < 0.45:
+        v_cmd = 0.85 if dist_to_goal > 1.2 else 0.35
+    elif abs(target_heading_err) < 0.9:
+        v_cmd = 0.45
+    else:
+        v_cmd = 0.15
+
+    # Mutual yielding using k-NN
+    neighbor_dx = float(obs_agent[10]) * 6.0
+    neighbor_dz = float(obs_agent[11]) * 6.0
+    neighbor_dist = np.hypot(neighbor_dx, neighbor_dz)
+
+    if 0.1 < neighbor_dist < 2.2:
+        # Agent with higher index yields in narrow aisle
+        if agent_idx > 0:
+            v_cmd = 0.10
+            w_cmd += 0.50
+
+    return np.array([v_cmd, w_cmd], dtype=np.float32)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="View Phase 08 Fleet MAPPO in Visual Window.")
     parser.add_argument("--checkpoint", type=str, default="src/training/logs/checkpoints/fleet/mappo_fleet_final.pt", help="Path to MAPPO checkpoint (.pt)")
@@ -60,6 +92,7 @@ def main() -> None:
         fps=args.fps,
     )
 
+    has_checkpoint = os.path.isfile(args.checkpoint)
     agent = MappoAgent(
         obs_dim=env.obs_dim,
         act_dim=env.act_dim,
@@ -67,13 +100,12 @@ def main() -> None:
         device="cpu",
     )
 
-    if os.path.isfile(args.checkpoint):
+    if has_checkpoint:
         agent.load(args.checkpoint)
+        print(f">> Loaded MAPPO Trained Policy: {args.checkpoint}\n")
     else:
-        print(f">> Notice: No pre-existing checkpoint found at '{args.checkpoint}'.")
-        print(">> Running with initialized coordination weights (exploration / cooperative baseline).\n")
-
-    step_interval = 1.0 / max(1.0, args.fps)
+        print(f">> Notice: Checkpoint '{args.checkpoint}' not found.")
+        print(">> Running with Fleet Coordinated Navigator (Goal Seeking + Mutual Yielding).\n")
 
     try:
         for ep in range(1, args.episodes + 1):
@@ -90,7 +122,11 @@ def main() -> None:
 
             while True:
                 step += 1
-                actions, _, _ = agent.select_actions(obs, global_state, deterministic=True)
+                if has_checkpoint:
+                    actions, _, _ = agent.select_actions(obs, global_state, deterministic=True)
+                else:
+                    acts = [compute_fleet_navigation_action(obs[i], i) for i in range(args.num_amrs)]
+                    actions = np.array(acts, dtype=np.float32)
 
                 next_obs, rewards, terminated, truncated, next_info = env.step(actions)
                 ep_reward += float(rewards.mean())
