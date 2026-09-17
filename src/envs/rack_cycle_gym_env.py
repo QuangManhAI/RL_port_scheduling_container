@@ -91,10 +91,14 @@ class RackCycleGymEnv(gym.Env):
         difficulty = 0.0
         full_tray = False
         multi_box = False
+        extra_kwargs: Dict[str, Any] = {}
         if options:
             difficulty = float(options.get("difficulty", 0.0))
             full_tray = bool(options.get("full_tray", False))
             multi_box = bool(options.get("multi_box", False))
+            for k, v in options.items():
+                if k not in ["difficulty", "full_tray", "multi_box"]:
+                    extra_kwargs[k] = v
 
         assert self.bridge is not None
         raw_obs, info = self.bridge.reset(
@@ -102,6 +106,7 @@ class RackCycleGymEnv(gym.Env):
             difficulty=difficulty,
             full_tray=full_tray,
             multi_box=multi_box,
+            **extra_kwargs,
         )
 
         obs = np.array(raw_obs, dtype=np.float32)
