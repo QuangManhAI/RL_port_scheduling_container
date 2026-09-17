@@ -60,8 +60,8 @@ STAGE_MAP = {
 
 def main() -> None:
     clock_cfg = get_clock_config()
-    def_physics_fps = int(clock_cfg.get("physics_fps", 200))
-    def_action_fps = float(clock_cfg.get("action_fps", 60.0))
+    def_physics_fps = int(clock_cfg.get("physics_fps"))
+    def_action_fps = float(clock_cfg.get("action_fps"))
 
     parser = argparse.ArgumentParser(description="View trained RL agent navigating in Godot.")
     parser.add_argument("--stage", type=str, default="r1", choices=list(STAGE_MAP.keys()), help="Stage to view (default: r1)")
@@ -199,16 +199,26 @@ def main() -> None:
 
                 if terminated or truncated:
                     elapsed = time.time() - t_start
-                    goal = (
+                    cycle_ok = bool(info.get("cycle_success", False) or info.get("all_boxes_transported", False))
+                    goal = cycle_ok if stage_key == "r4" else (
                         info.get("goal_reached", False)
-                        or info.get("is_picked", False)
+                        or (info.get("is_picked", False) and stage_key in ["r2", "r3"])
                         or info.get("is_placed", False)
                         or info.get("docking_success", False)
                     )
+                    if truncated and not cycle_ok:
+                        goal = False
+
                     col = info.get("wall_collided", False)
+                    dropped = info.get("box_dropped", False)
+                    toppled = info.get("rack_toppled", False)
 
                     if goal:
                         status_str = "✔ GOAL REACHED!"
+                    elif dropped:
+                        status_str = "❌ BOX DROPPED / GLITCHED"
+                    elif toppled:
+                        status_str = "⚠️ RACK TOPPLED"
                     elif col:
                         status_str = "💥 WALL COLLISION"
                     elif truncated:

@@ -53,6 +53,10 @@ var is_placed: bool = false
 var cycle_success: bool = false
 var rack_toppled: bool = false
 var wall_collided: bool = false
+var box_dropped: bool = false
+var total_placed_boxes: int = 0
+var initial_stowed_count: int = 0
+var is_full_tray_mode: bool = false
 
 var last_ik_dist: float = 0.0
 var last_ik_err: String = ""
@@ -68,7 +72,7 @@ var _mat_normal: StandardMaterial3D
 var _mat_highlight: StandardMaterial3D
 
 func _ready() -> void:
-	max_episode_steps = 550
+	max_episode_steps = 650
 	_setup_materials()
 	_init_boxes()
 	super._ready()
@@ -120,11 +124,18 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 	cycle_success = false
 	rack_toppled = false
 	wall_collided = false
+	box_dropped = false
 	trigger_attempted = false
 	failed_attempt = false
 	_sub_stage_steps = 0
 	_stow_reset_timer = 0.0
 	current_sub_stage = CycleSubStage.NAVIGATE_TO_RACK
+	total_placed_boxes = 0
+	initial_stowed_count = 0
+	is_full_tray_mode = false
+
+	if last_reset_msg.get("full_tray", false) or last_reset_msg.get("multi_box", false) or difficulty >= 2.0:
+		is_full_tray_mode = true
 
 	# 1. Reset Rack position and physics state at z = -4.0m, facing aisle (rotation.y = PI)
 	if rack:
@@ -144,10 +155,14 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 	# 3. Spawn AMR in mid-bay corridor (between rack and conveyor)
 	if amr:
 		amr.arm_tween_speed_scale = 3.5
-		# Mid-bay spawn: z in [-1.5, +1.5], x in [-2.2, +2.2]
 		var spawn_x = rng.randf_range(-2.0, 2.0)
 		var spawn_z = rng.randf_range(-1.2, 1.2)
 		var spawn_yaw = rng.randf_range(-PI, PI)
+
+		if is_full_tray_mode:
+			spawn_x = rng.randf_range(-1.5, 1.5)
+			spawn_z = rng.randf_range(-1.2, 0.5)
+			spawn_yaw = rng.randf_range(-0.35, 0.35)
 
 		amr.reset_robot(Vector3(spawn_x, 0.0, spawn_z), spawn_yaw)
 		amr.is_manual_control = false
@@ -185,6 +200,37 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 		if target_box and target_box.mesh_inst:
 			target_box.mesh_inst.material_override = _mat_highlight
 
+	if is_full_tray_mode and amr and amr.cargo_tray and boxes.size() >= 2:
+		var b0 = boxes[0]
+		var b1 = boxes[1]
+
+		if b0.get_parent(): b0.get_parent().remove_child(b0)
+		amr.cargo_tray.add_child(b0)
+		b0.position = amr.slot_1_marker.position if amr.slot_1_marker else Vector3(0.0, 0.17, -0.22)
+		b0.rotation = Vector3.ZERO
+		b0.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+		b0.freeze = true
+		b0.sleeping = false
+		amr.add_collision_exception_with(b0)
+		b0.add_collision_exception_with(amr)
+
+		if b1.get_parent(): b1.get_parent().remove_child(b1)
+		amr.cargo_tray.add_child(b1)
+		b1.position = amr.slot_2_marker.position if amr.slot_2_marker else Vector3(0.0, 0.17, 0.22)
+		b1.rotation = Vector3.ZERO
+		b1.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+		b1.freeze = true
+		b1.sleeping = false
+		amr.add_collision_exception_with(b1)
+		b1.add_collision_exception_with(amr)
+
+		initial_stowed_count = 2
+		is_picked = true
+		is_stowed = true
+		current_sub_stage = CycleSubStage.NAVIGATE_CARRYING
+	else:
+		initial_stowed_count = 1
+
 	prev_sub_goal_dist = _get_dist_to_active_subgoal()
 
 func _get_target_box_pos() -> Vector3:
@@ -197,7 +243,7 @@ func _get_active_subgoal_pos() -> Vector3:
 	if current_sub_stage in [CycleSubStage.NAVIGATE_TO_RACK, CycleSubStage.DOCK_AND_PICK, CycleSubStage.TRAY_STOW]:
 		return _get_target_box_pos()
 	else:
-		return drop_target_marker.global_position if drop_target_marker else Vector3(0.0, 0.61, 3.95)
+		return drop_target_marker.global_position if drop_target_marker else Vector3(0.0, 0.77, 3.95)
 
 func _get_dist_to_active_subgoal() -> float:
 	if not amr:
@@ -327,8 +373,10 @@ func _apply_action(action: Array) -> void:
 				failed_attempt = true
 
 	elif current_sub_stage in [CycleSubStage.NAVIGATE_CARRYING, CycleSubStage.CONVEYOR_DOCK] and is_stowed and not is_placed:
-		# Conveyor table dropoff trigger
-		var drop_pos = drop_target_marker.global_position if drop_target_marker else Vector3(0.0, 0.61, 3.95)
+		# Conveyor table dropoff trigger (slot-aware for multi-box)
+		var drop_pos = drop_target_marker.global_position if drop_target_marker else Vector3(0.0, 0.77, 3.95)
+		if amr.get_stowed_box_count() > 1:
+			drop_pos = conveyor.to_global(Vector3(-0.35, 0.77, -0.05)) if conveyor else (drop_pos + Vector3(-0.35, 0.0, 0.0))
 		var ik_deck = ArmIKSolver.solve_local(amr.arm.to_local(drop_pos))
 		last_ik_dist = ik_deck.target_distance
 		last_ik_err = ik_deck.error_message
@@ -360,12 +408,18 @@ func _physics_process(delta: float) -> void:
 				current_sub_stage = CycleSubStage.NAVIGATE_CARRYING
 				prev_sub_goal_dist = _get_dist_to_active_subgoal()
 
-		# Auto-chain: Unstow & placed on conveyor -> Cycle Complete
+		# Auto-chain: Unstow & placed on conveyor -> Unstow next box or Cycle Complete
 		if current_sub_stage == CycleSubStage.UNSTOW_AND_PLACE:
-			if amr.get_stowed_box_count() == 0 and not amr._is_arm_tweening and amr.held_box == null:
-				is_placed = true
-				cycle_success = true
-				current_sub_stage = CycleSubStage.CYCLE_COMPLETE
+			if not amr._is_arm_tweening and amr.held_box == null:
+				if amr.get_stowed_box_count() > 0:
+					total_placed_boxes += 1
+					var next_pos = conveyor.to_global(Vector3(0.35, 0.77, -0.05)) if conveyor else (drop_target_marker.global_position + Vector3(0.35, 0.0, 0.0))
+					amr.execute_dynamic_unstow_and_place(next_pos)
+				else:
+					total_placed_boxes += 1
+					is_placed = true
+					cycle_success = true
+					current_sub_stage = CycleSubStage.CYCLE_COMPLETE
 
 	# Auto-cycle to next target after completing cycle (for interactive viewing)
 	if cycle_success:
@@ -451,25 +505,33 @@ func _compute_reward(action: Array) -> float:
 
 		CycleSubStage.NAVIGATE_CARRYING, CycleSubStage.CONVEYOR_DOCK:
 			# Guidance to conveyor table
-			if cur_dist <= 2.0 and face_align >= 0.50:
-				reward += 0.35
-				reward += (trigger + 1.0) * 0.50
+			if cur_dist <= 2.2 and face_align >= 0.40:
+				reward += 0.15
+				if trigger > 0.0 and amr.current_speed <= 0.45:
+					reward += 0.50
 
 		CycleSubStage.UNSTOW_AND_PLACE, CycleSubStage.CYCLE_COMPLETE:
 			if cycle_success:
 				reward += 30.0 + maxf(0.0, face_align) * 5.0
 
-	# 5. Failed premature trigger penalty
+	# 5. Check for dropped / fallen boxes
+	for b in boxes:
+		if b and is_instance_valid(b) and b.global_position.y < -0.20:
+			box_dropped = true
+			reward -= 15.0
+			break
+
+	# 6. Failed premature trigger penalty
 	if failed_attempt:
 		reward -= 0.05
 		failed_attempt = false
 
-	# 6. Step penalty
+	# 7. Step penalty
 	reward -= 0.02
 	return reward
 
 func _is_terminated() -> bool:
-	return cycle_success or rack_toppled or wall_collided
+	return cycle_success or rack_toppled or wall_collided or box_dropped
 
 func _get_info() -> Dictionary:
 	var forward = -amr.global_transform.basis.z if amr else Vector3.FORWARD
@@ -509,4 +571,11 @@ func _get_info() -> Dictionary:
 		"trigger_attempted": trigger_attempted,
 		"failed_attempt": failed_attempt,
 		"col_name": col_name,
+		"stowed_box_count": amr.get_stowed_box_count() if amr else 0,
+		"total_placed_boxes": total_placed_boxes,
+		"initial_stowed_count": initial_stowed_count,
+		"is_full_tray_mode": is_full_tray_mode,
+		"cargo_tray_attached": (amr.cargo_tray != null and amr.cargo_tray.get_parent() != null and amr.cargo_tray.get_parent().name == "Chassis"),
+		"all_boxes_transported": (is_placed and (amr.get_stowed_box_count() if amr else 0) == 0),
+		"box_dropped": box_dropped,
 	}

@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3 uid="uid://c3r8cycler4scene01"]
+[gd_scene format=3 uid="uid://caey6se4k8a57"]
 
 [ext_resource type="Script" path="res://scripts/training/rack_cycle_env.gd" id="1_env"]
 [ext_resource type="PackedScene" uid="uid://dmx3amr002" path="res://scenes/entities/amr_robot.tscn" id="2_amr"]
