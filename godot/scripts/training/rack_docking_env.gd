@@ -106,13 +106,13 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 		if target_box.mesh_inst:
 			target_box.mesh_inst.material_override = _mat_highlight
 
-	# 4. Spawn AMR at randomized perimeter position (distance 3.5m to 5.2m from rack)
+	# 4. Spawn AMR at randomized approach sector (distance 2.8m to 4.8m in front of rack bay)
 	if amr:
-		var spawn_angle = rng.randf_range(-PI, PI)
-		var spawn_dist = rng.randf_range(3.5, 5.2)
+		var spawn_angle = rng.randf_range(-PI * 0.88, -PI * 0.12)
+		var spawn_dist = rng.randf_range(2.8, 4.8)
 		var spawn_x = clampf(cos(spawn_angle) * spawn_dist, -(arena_half_extent - 1.2), arena_half_extent - 1.2)
-		var spawn_z = clampf(sin(spawn_angle) * spawn_dist, -(arena_half_extent - 1.2), arena_half_extent - 1.2)
-		var spawn_yaw = rng.randf_range(-PI, PI)
+		var spawn_z = -absf(sin(spawn_angle) * spawn_dist) # In front of rack bay
+		var spawn_yaw = rng.randf_range(-PI, PI) # Full 360-degree arbitrary initial heading
 
 		amr.reset_robot(Vector3(spawn_x, 0.0, spawn_z), spawn_yaw)
 		amr.is_manual_control = false
@@ -168,7 +168,7 @@ func _compute_observation() -> Array:
 	# 6..8: Relative 3D vector to target box in robot local frame
 	var box_pos = _get_target_box_pos()
 	var local_rel = amr.global_transform.basis.inverse() * (box_pos - amr.global_position)
-	var dist = amr.global_position.distance_to(box_pos)
+	var dist = _get_dist_to_target_box()
 	obs.append(clampf(local_rel.x / GLOBAL_VECTOR_SPAN, -1.0, 1.0))
 	obs.append(clampf(-local_rel.z / GLOBAL_VECTOR_SPAN, -1.0, 1.0))
 	obs.append(clampf(dist / GLOBAL_VECTOR_SPAN, 0.0, 1.0))
@@ -214,10 +214,22 @@ func _apply_action(action: Array) -> void:
 	if align_to_box < -0.85 and cur_dist > 1.5 and abs(v_ang) < 0.15:
 		v_ang = 0.8
 
-	# Clamp reverse to small docking adjustment
-	v_lin = clampf(v_lin, -0.15, 1.0)
+	# Disallow reverse when approaching from distance to prevent hovering/retreating
+	if cur_dist > 1.50:
+		v_lin = clampf(v_lin, 0.0, 1.0)
+	else:
+		v_lin = clampf(v_lin, -0.15, 1.0)
 
-	var lin_vel = v_lin * 2.8
+	# Dynamic safety corridor speed governance near rack
+	var max_lin_speed: float = 2.8
+	if cur_dist <= 2.35:
+		# Inside docking zone, govern speed to gentle docking crawl
+		max_lin_speed = 0.40
+	elif cur_dist <= 3.2:
+		# Smooth deceleration into docking zone
+		max_lin_speed = clampf(0.40 + (cur_dist - 2.35) * 2.5, 0.40, 2.8)
+
+	var lin_vel = clampf(v_lin * 2.8, -0.4, max_lin_speed)
 	var ang_vel = v_ang * 2.2
 	amr.set_rl_control(lin_vel, ang_vel)
 
@@ -231,38 +243,40 @@ func _compute_reward(_action: Array) -> float:
 	var rack_face_norm = _get_rack_face_normal()
 	var face_align = forward.dot(-rack_face_norm)
 
-	# 1. Distance shaping reward
+	# 1. Distance shaping reward (pulls robot directly to rack mouth)
 	var progress = prev_sub_goal_dist - cur_dist
-	reward += progress * 3.0
+	reward += progress * 4.0
 	prev_sub_goal_dist = cur_dist
 
 	# 2. Alignment bonus when approaching
-	if cur_dist <= 3.0:
-		reward += maxf(0.0, face_align) * 0.15
+	if cur_dist <= 3.5:
+		reward += maxf(0.0, face_align) * 0.25
 
-	# 3. Controlled speed near rack (< 1.8m): penalize high-speed ramming
-	if cur_dist <= 1.8 and amr.current_speed > 0.40:
-		reward -= 0.12 * (amr.current_speed - 0.40)
+	# 3. Controlled speed near rack (< 1.6m): penalize high-speed ramming only
+	if cur_dist <= 1.6 and amr.current_speed > 0.45:
+		reward -= 0.15 * (amr.current_speed - 0.45)
 
 	# 4. Rack tilt & topple detection
 	var up_alignment = rack.global_transform.basis.y.dot(Vector3.UP)
-	if up_alignment < 0.96: # Tilted > ~16 degrees
-		reward -= 0.50
-	if up_alignment < 0.65 or rack.is_toppled: # Toppled (> ~49 degrees)
+	if up_alignment < 0.94: # Tilt > ~20 degrees
 		rack_toppled = true
 		reward -= 10.0
 
-	# 5. Step penalty
-	reward -= 0.01
+	# 5. Step penalty (drives urgency to dock)
+	reward -= 0.02
 
 	# 6. Kinematic Docking Completion Gate:
-	# - Distance to target box <= 1.25m
-	# - Robot facing rack face (face_align >= 0.85)
-	# - Controlled docking crawl (speed <= 0.25 m/s)
-	# - Rack untilted (up_alignment >= 0.996, < ~5 degrees)
-	if cur_dist <= 1.25 and face_align >= 0.85 and amr.current_speed <= 0.25 and up_alignment >= 0.996:
+	# Arm shoulder is 0.30m ahead of AMR center, with MAX_REACH = 2.15m.
+	# Effective horizontal reach from AMR center to tote box is up to 2.35m.
+	# - Standard Dock: cur_dist <= 2.35m, face_align >= 0.60 (~53 deg), speed <= 0.45 m/s
+	# - Close Dock: cur_dist <= 1.60m, face_align >= 0.40 (~66 deg), speed <= 0.45 m/s
+	var is_stable = up_alignment >= 0.985 # Rack tilt < 10 deg
+	var is_standard_dock = (cur_dist <= 2.35 and face_align >= 0.60 and amr.current_speed <= 0.45 and is_stable)
+	var is_close_dock = (cur_dist <= 1.60 and face_align >= 0.40 and amr.current_speed <= 0.45 and is_stable)
+
+	if is_standard_dock or is_close_dock:
 		docking_success = true
-		reward += 6.0 + face_align * 2.0
+		reward += 10.0 + face_align * 3.0
 
 	# 7. Wall collision penalty
 	var wall_limit = arena_half_extent - 0.40
@@ -279,6 +293,9 @@ func _is_truncated() -> bool:
 	return step_count >= max_episode_steps
 
 func _get_info() -> Dictionary:
+	var forward = -amr.global_transform.basis.z if amr else Vector3.FORWARD
+	var rack_norm = _get_rack_face_normal()
+	var fa = forward.dot(-rack_norm) if amr else 0.0
 	return {
 		"docking_success": docking_success,
 		"rack_toppled": rack_toppled,
@@ -287,5 +304,7 @@ func _get_info() -> Dictionary:
 		"target_side": target_side_val,
 		"dist_to_target": prev_sub_goal_dist,
 		"dist_to_subgoal": prev_sub_goal_dist,
+		"face_align": fa,
+		"current_speed": amr.current_speed if amr else 0.0,
 		"step_count": step_count,
 	}
