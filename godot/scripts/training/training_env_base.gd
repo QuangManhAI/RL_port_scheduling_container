@@ -8,7 +8,9 @@ extends Node3D
 
 signal episode_ended(terminated: bool, truncated: bool)
 
-@export var ticks_per_step: int = 4
+@export var physics_hz: int = 200  ## Simulation clock: 200 FPS high-fidelity physics
+@export var action_hz: int = 60    ## Action decision clock: 60 FPS
+@export var ticks_per_step: int = 4 ## Legacy fallback ticks parameter
 @export var max_episode_steps: int = 600
 @export var default_port: int = 11000
 
@@ -19,6 +21,7 @@ var step_count: int = 0
 var current_difficulty: float = 0.0
 var is_client_connected: bool = false
 var _is_processing_step: bool = false
+var _action_tick_accumulator: float = 0.0
 
 @onready var amr: AmrRobot = get_node_or_null("AMR_Robot")
 
@@ -27,6 +30,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 	_parse_cmdline_args()
+	Engine.physics_ticks_per_second = physics_hz
 	_start_tcp_server()
 
 	# Pause scene physics initially until Python connects and issues reset()
@@ -40,6 +44,10 @@ func _parse_cmdline_args() -> void:
 	for arg in args:
 		if arg.begins_with("--port="):
 			active_port = int(arg.replace("--port=", ""))
+		elif arg.begins_with("--physics_hz="):
+			physics_hz = int(arg.replace("--physics_hz=", ""))
+		elif arg.begins_with("--action_hz="):
+			action_hz = int(arg.replace("--action_hz=", ""))
 		elif arg.begins_with("--ticks="):
 			ticks_per_step = int(arg.replace("--ticks=", ""))
 		elif arg.begins_with("--max_steps="):
@@ -120,6 +128,7 @@ func _handle_client_message(msg: Dictionary) -> void:
 			var seed_val: int = int(msg.get("seed", 0))
 			current_difficulty = float(msg.get("difficulty", 0.0))
 			step_count = 0
+			_action_tick_accumulator = 0.0
 
 			# Execute reset
 			_on_arena_reset(seed_val, current_difficulty)
@@ -146,9 +155,17 @@ func _handle_client_message(msg: Dictionary) -> void:
 			# 1. Apply action
 			_apply_action(action)
 
-			# 2. Advance physics for exactly ticks_per_step frames
+			# 2. Advance physics for simulated action interval (physics_hz / action_hz ticks)
+			# At 200 Hz physics and 60 Hz action, this averages 3.3333 ticks per step.
+			# Fractional accumulator guarantees exact 200 physics ticks per 60 action steps (zero drift).
+			_action_tick_accumulator += float(physics_hz) / float(max(1, action_hz))
+			var ticks_to_advance: int = int(_action_tick_accumulator)
+			_action_tick_accumulator -= float(ticks_to_advance)
+			if ticks_to_advance < 1:
+				ticks_to_advance = 1
+
 			get_tree().paused = false
-			for i in range(ticks_per_step):
+			for i in range(ticks_to_advance):
 				await get_tree().physics_frame
 			get_tree().paused = true
 

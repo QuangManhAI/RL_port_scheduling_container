@@ -50,10 +50,13 @@ STAGE_MAP = {
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="View trained RL agent navigating in Godot.")
-    parser.add_argument("--stage", type=str, default="s1", choices=list(STAGE_MAP.keys()), help="Stage to view")
+    parser.add_argument("--stage", type=str, default="r1", choices=list(STAGE_MAP.keys()), help="Stage to view")
     parser.add_argument("--model", type=str, default="", help="Path to PPO model .zip (defaults to stage final checkpoint)")
     parser.add_argument("--port", type=int, default=11000, help="TCP port for Godot bridge")
-    parser.add_argument("--fps", type=float, default=300.0, help="Simulation playback rate (actions per second)")
+    parser.add_argument("--physics-fps", type=int, default=200, help="Simulation physics clock rate in Hz (default: 200)")
+    parser.add_argument("--action-fps", type=float, default=60.0, help="Action decision clock rate in Hz (default: 60)")
+    parser.add_argument("--fps", type=float, default=0.0, help="Alias for action playback rate (if set, overrides --action-fps)")
+    parser.add_argument("--native", action="store_true", help="Run 100% native in-engine AI (zero Python TCP overhead, dual-clock decoupled)")
     parser.add_argument("--connect", action="store_true", help="Connect to already-running Godot Editor instance (F6) instead of spawning a new window")
     parser.add_argument("--episodes", type=int, default=30, help="Number of episodes to run (0 for infinite)")
     parser.add_argument("--difficulty", type=float, default=0, help="Curriculum difficulty (0.0 to 1.0)")
@@ -63,6 +66,38 @@ def main() -> None:
     stage_key = args.stage.lower()
     env_cls, default_model_path = STAGE_MAP[stage_key]
     model_path = args.model if args.model else default_model_path
+    action_hz = args.fps if args.fps > 0 else args.action_fps
+
+    if args.native:
+        from src.envs.godot_env_bridge import find_godot_binary
+        import subprocess
+        godot_bin = find_godot_binary()
+        proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        godot_proj = os.path.join(proj_root, "godot")
+        scene = "res://scenes/training/training_rack_docking.tscn" if "r" in stage_key else "res://scenes/training/multi_agent_arena.tscn"
+        print("===========================================================")
+        print("  MODE: Native Dual-Clock In-Engine AI")
+        print(f"  Simulation Speed (Physics):  {args.physics_fps} Hz")
+        print(f"  Action Decision Clock:       {int(action_hz)} Hz")
+        print("  Render Clock:                Monitor Refresh Rate (Decoupled)")
+        print(f"  Scene:                       {scene}")
+        print("===========================================================\n")
+        cmd = [
+            godot_bin,
+            "--path",
+            godot_proj,
+            scene,
+            "--native-ai",
+            f"--physics_hz={args.physics_fps}",
+            f"--action_hz={int(action_hz)}",
+            "--fixed-fps",
+            str(args.physics_fps),
+            "--max-fps",
+            "0",
+            "--disable-vsync",
+        ]
+        subprocess.run(cmd)
+        return
 
     if not os.path.isfile(model_path):
         # Check if s1 checkpoint exists as fallback
@@ -76,11 +111,12 @@ def main() -> None:
             sys.exit(1)
 
     print(f"===========================================================")
-    print(f"  Stage:       {stage_key.upper()}")
-    print(f"  Model:       {model_path}")
-    print(f"  Mode:        {'Connect to open Godot Editor (F6)' if args.connect else 'Spawn new Visual Godot Window'}")
-    print(f"  Pacing:      {args.fps} actions/sec (~{1000/args.fps:.0f} ms/step)")
-    print(f"  Port:        {args.port}")
+    print(f"  Stage:                       {stage_key.upper()}")
+    print(f"  Model:                       {model_path}")
+    print(f"  Mode:                        {'Connect to open Godot Editor (F6)' if args.connect else 'Spawn new Visual Godot Window'}")
+    print(f"  Simulation Clock (Physics):  {args.physics_fps} Hz (200 FPS physics)")
+    print(f"  Action Decision Clock:       {action_hz:.1f} Hz (60 FPS decisions)")
+    print(f"  Port:                        {args.port}")
     print(f"===========================================================\n")
 
     if args.connect:
@@ -92,6 +128,8 @@ def main() -> None:
     env = env_cls(
         port=args.port,
         ticks_per_step=4,
+        physics_hz=args.physics_fps,
+        action_hz=int(action_hz),
         headless=False,
         autostart=not args.connect,
     )
@@ -99,7 +137,7 @@ def main() -> None:
     print(f"Loading trained policy from {model_path}...")
     model = PPO.load(model_path, device="cpu")
 
-    step_delay = 1.0 / max(1.0, args.fps)
+    step_interval = 1.0 / max(1.0, action_hz)
     episode_idx = 0
 
     try:
@@ -136,8 +174,8 @@ def main() -> None:
                 )
                 sys.stdout.flush()
 
-                # Real-time pacing for human observation
-                time.sleep(step_delay)
+                # Real-time pacing for human observation (60 Hz action clock)
+                time.sleep(step_interval)
 
                 if terminated or truncated:
                     elapsed = time.time() - t_start
