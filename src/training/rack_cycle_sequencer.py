@@ -271,8 +271,7 @@ def main() -> None:
     parser.add_argument("--checkpoints", type=str, default="src/training/logs/checkpoints")
     parser.add_argument("--r4-model", type=str, default="", help="Optional unified PPO R4 model path")
     parser.add_argument("--port", type=int, default=11104, help="Godot TCP port")
-    parser.add_argument("--device", type=str, default="cpu")
-    parser.add_argument("--headless", action="store_true", default=True, help="Run headless")
+    parser.add_argument("--render", action="store_true", default=False, help="Render interactive visual window")
     parser.add_argument("--seed-offset", type=int, default=2000, help="Seed base for deterministic testing")
 
     args = parser.parse_args()
@@ -284,7 +283,7 @@ def main() -> None:
         r4_policy_path=r4_path,
         port=args.port,
         device=args.device,
-        headless=args.headless,
+        headless=not args.render,
         seed_offset=args.seed_offset,
         verbose=True,
     )

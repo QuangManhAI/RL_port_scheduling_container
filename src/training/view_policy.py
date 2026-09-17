@@ -33,6 +33,7 @@ from src.envs.pickup_env import PickupEnv
 from src.envs.rack_docking_gym_env import RackDockingGymEnv
 from src.envs.rack_targeting_gym_env import RackTargetingGymEnv
 from src.envs.rack_pick_gym_env import RackPickGymEnv
+from src.envs.rack_cycle_gym_env import RackCycleGymEnv
 from src.utils.config_loader import get_clock_config
 
 STAGE_MAP = {
@@ -52,6 +53,8 @@ STAGE_MAP = {
     "rack_targeting": (RackTargetingGymEnv, "src/training/logs/checkpoints/ppo_r2_final.zip"),
     "r3": (RackPickGymEnv, "src/training/logs/checkpoints/ppo_r3_final.zip"),
     "rack_pick": (RackPickGymEnv, "src/training/logs/checkpoints/ppo_r3_final.zip"),
+    "r4": (RackCycleGymEnv, "src/training/logs/checkpoints/ppo_r4_final.zip"),
+    "rack_cycle": (RackCycleGymEnv, "src/training/logs/checkpoints/ppo_r4_final.zip"),
 }
 
 
