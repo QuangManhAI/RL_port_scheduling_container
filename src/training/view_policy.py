@@ -31,6 +31,8 @@ from src.envs.navigate_carrying_env import NavigateCarryingEnv
 from src.envs.navigate_to_item_env import NavigateToItemEnv
 from src.envs.pickup_env import PickupEnv
 from src.envs.rack_docking_gym_env import RackDockingGymEnv
+from src.envs.rack_targeting_gym_env import RackTargetingGymEnv
+from src.utils.config_loader import get_clock_config
 
 STAGE_MAP = {
     "s1": (NavigateToItemEnv, "src/training/logs/checkpoints/ppo_s1_final.zip"),
@@ -45,17 +47,22 @@ STAGE_MAP = {
     "chained_cycle": (ChainedCycleEnv, "src/training/logs/checkpoints/ppo_s5_final.zip"),
     "r1": (RackDockingGymEnv, "src/training/logs/checkpoints/ppo_r1_final.zip"),
     "rack_docking": (RackDockingGymEnv, "src/training/logs/checkpoints/ppo_r1_final.zip"),
+    "r2": (RackTargetingGymEnv, "src/training/logs/checkpoints/ppo_r2_final.zip"),
+    "rack_targeting": (RackTargetingGymEnv, "src/training/logs/checkpoints/ppo_r2_final.zip"),
 }
 
 
 def main() -> None:
+    clock_cfg = get_clock_config()
+    def_physics_fps = int(clock_cfg.get("physics_fps", 200))
+    def_action_fps = float(clock_cfg.get("action_fps", 60.0))
+
     parser = argparse.ArgumentParser(description="View trained RL agent navigating in Godot.")
-    parser.add_argument("--stage", type=str, default="r1", choices=list(STAGE_MAP.keys()), help="Stage to view")
+    parser.add_argument("--stage", type=str, default="r1", choices=list(STAGE_MAP.keys()), help="Stage to view (default: r1)")
     parser.add_argument("--model", type=str, default="", help="Path to PPO model .zip (defaults to stage final checkpoint)")
     parser.add_argument("--port", type=int, default=11000, help="TCP port for Godot bridge")
-    parser.add_argument("--physics-fps", type=int, default=200, help="Simulation physics clock rate in Hz (default: 200)")
-    parser.add_argument("--action-fps", type=float, default=60.0, help="Action decision clock rate in Hz (default: 60)")
-    parser.add_argument("--fps", type=float, default=0.0, help="Alias for action playback rate (if set, overrides --action-fps)")
+    parser.add_argument("--physics-fps", type=int, default=def_physics_fps, help=f"Simulation physics clock rate in Hz (default from config.yaml: {def_physics_fps})")
+    parser.add_argument("--action-fps", type=float, default=def_action_fps, help=f"Action decision clock rate in Hz (default from config.yaml: {def_action_fps})")
     parser.add_argument("--native", action="store_true", help="Run 100% native in-engine AI (zero Python TCP overhead, dual-clock decoupled)")
     parser.add_argument("--connect", action="store_true", help="Connect to already-running Godot Editor instance (F6) instead of spawning a new window")
     parser.add_argument("--episodes", type=int, default=30, help="Number of episodes to run (0 for infinite)")
@@ -66,7 +73,7 @@ def main() -> None:
     stage_key = args.stage.lower()
     env_cls, default_model_path = STAGE_MAP[stage_key]
     model_path = args.model if args.model else default_model_path
-    action_hz = args.fps if args.fps > 0 else args.action_fps
+    action_hz = args.action_fps
 
     if args.native:
         from src.envs.godot_env_bridge import find_godot_binary
