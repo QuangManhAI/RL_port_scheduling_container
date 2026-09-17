@@ -139,7 +139,10 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 		var s_def = TOTE_SLOT_DEFS[i]
 		var world_box_pos = rack.global_position + s_def["offset"]
 		b.visible = true
-		b.freeze = true
+		if difficulty < 0.70:
+			b.freeze = true
+		else:
+			b.freeze = false
 		b.linear_velocity = Vector3.ZERO
 		b.angular_velocity = Vector3.ZERO
 		b.global_position = world_box_pos
