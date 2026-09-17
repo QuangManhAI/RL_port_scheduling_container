@@ -321,7 +321,7 @@ func execute_dynamic_pick(target_box: ToteBox) -> void:
 	var box_pos: Vector3 = target_box.global_position
 	var is_on_shelf: bool = box_pos.y > 0.45
 
-	# 1. Calculate staging and grasp waypoints
+	# 1. Calculate staging and grasp waypoints with full collision clearance outside bay
 	var staging_pos: Vector3
 	if is_on_shelf:
 		var dir_to_amr: Vector3 = (global_position - box_pos)
@@ -330,11 +330,12 @@ func execute_dynamic_pick(target_box: ToteBox) -> void:
 			dir_to_amr = dir_to_amr.normalized()
 		else:
 			dir_to_amr = -global_transform.basis.z
+		# Pull back 0.48m so 26cm fingers are completely outside the front face of the 38cm box with 5cm margin
 		var local_dist: float = arm.to_local(box_pos).length()
-		var pullback: float = clampf(local_dist - 0.32, 0.10, 0.25)
+		var pullback: float = clampf(local_dist - 0.45, 0.42, 0.52)
 		staging_pos = box_pos + dir_to_amr * pullback
 	else:
-		staging_pos = box_pos + Vector3(0.0, 0.22, 0.0)
+		staging_pos = box_pos + Vector3(0.0, 0.35, 0.0)
 
 	var ik_grasp = ArmIKSolver.solve_local(arm.to_local(box_pos))
 	if not ik_grasp.success:
@@ -349,7 +350,7 @@ func execute_dynamic_pick(target_box: ToteBox) -> void:
 	var ik_staging = ArmIKSolver.solve_local(arm.to_local(staging_pos))
 	if not ik_staging.success:
 		# Fallback: elevate staging slightly above grasp pose
-		staging_pos = box_pos + Vector3(0.0, 0.12, 0.0)
+		staging_pos = box_pos + Vector3(0.0, 0.16, 0.0)
 		ik_staging = ArmIKSolver.solve_local(arm.to_local(staging_pos))
 		if not ik_staging.success:
 			ik_staging = ik_grasp
@@ -359,7 +360,8 @@ func execute_dynamic_pick(target_box: ToteBox) -> void:
 
 	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
-	# --- STAGE 1: Pre-Grasp Staging & Gripper Opening ---
+	# --- STAGE 1: Pre-Grasp Staging & Gripper Opening in Aisle ---
+	# Open fingers wide to 68cm span WHILE OUTSIDE IN AISLE before any insertion into the bay
 	tween.tween_property(arm, "rotation:y", ik_staging.base_yaw, 0.45)
 	tween.parallel().tween_property(shoulder, "rotation:x", ik_staging.shoulder_pitch, 0.45)
 	tween.parallel().tween_property(elbow, "rotation:x", ik_staging.elbow_pitch, 0.45)
@@ -368,14 +370,15 @@ func execute_dynamic_pick(target_box: ToteBox) -> void:
 	if finger_right: tween.parallel().tween_property(finger_right, "position:x", 0.34, 0.35)
 
 	# --- STAGE 2: Linear Horizontal Insertion into Bay ---
+	# Open fingers slide cleanly along sides of box without touching or phasing through front face
 	tween.tween_callback(func():
 		arm_motion_state = ArmMotionState.INSERTING
 		_arm_status_text = "Stage 2: Linear Insertion into bay..."
 		_update_dev_status_label()
 	)
-	tween.tween_property(shoulder, "rotation:x", ik_grasp.shoulder_pitch, 0.35)
-	tween.parallel().tween_property(elbow, "rotation:x", ik_grasp.elbow_pitch, 0.35)
-	tween.parallel().tween_property(wrist, "rotation:x", ik_grasp.wrist_pitch, 0.35)
+	tween.tween_property(shoulder, "rotation:x", ik_grasp.shoulder_pitch, 0.38)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_grasp.elbow_pitch, 0.38)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_grasp.wrist_pitch, 0.38)
 
 	# --- STAGE 3: Bilateral Clamping onto Box ---
 	tween.tween_callback(func():
@@ -402,16 +405,17 @@ func execute_dynamic_pick(target_box: ToteBox) -> void:
 			SoundManager.play_spatial(self, SoundManager.sfx_box_pick, +2.0)
 	)
 
-	# --- STAGE 4: Linear Retraction with Box ---
+	# --- STAGE 4: Linear Retraction with Box back into Aisle ---
+	# Pull box straight back along horizontal staging axis into open aisle before folding
 	tween.tween_interval(0.08)
 	tween.tween_callback(func():
 		arm_motion_state = ArmMotionState.RETRACTING
 		_arm_status_text = "Stage 4: Retracting into aisle..."
 		_update_dev_status_label()
 	)
-	tween.tween_property(shoulder, "rotation:x", ik_staging.shoulder_pitch, 0.38)
-	tween.parallel().tween_property(elbow, "rotation:x", ik_staging.elbow_pitch, 0.38)
-	tween.parallel().tween_property(wrist, "rotation:x", ik_staging.wrist_pitch, 0.38)
+	tween.tween_property(shoulder, "rotation:x", ik_staging.shoulder_pitch, 0.40)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_staging.elbow_pitch, 0.40)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_staging.wrist_pitch, 0.40)
 
 	# --- STAGE 5: Held Ready in Aisle ---
 	tween.finished.connect(func():
@@ -443,7 +447,8 @@ func execute_dynamic_stow() -> void:
 
 	var slot_marker: Marker3D = slot_1_marker if target_slot_idx == 0 else slot_2_marker
 	var slot_world: Vector3 = slot_marker.global_position
-	var slot_staging_world: Vector3 = slot_world + Vector3(0.0, 0.28, 0.0)
+	# High-clearance waypoint (+0.52m) so bottom of carried box (height 0.32m) clears tray rails (0.12m) by 20cm
+	var slot_staging_world: Vector3 = slot_world + Vector3(0.0, 0.52, 0.0)
 
 	var ik_staging = ArmIKSolver.solve_local(arm.to_local(slot_staging_world))
 	var ik_place = ArmIKSolver.solve_local(arm.to_local(slot_world))
@@ -453,16 +458,16 @@ func execute_dynamic_stow() -> void:
 
 	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 
-	# 1. Swivel 180 degrees backwards over active slot
+	# 1. Swivel 180 degrees backwards over active slot at high altitude (above tray rails)
 	tween.tween_property(arm, "rotation:y", ik_staging.base_yaw, 0.45)
 	tween.parallel().tween_property(shoulder, "rotation:x", ik_staging.shoulder_pitch, 0.45)
 	tween.parallel().tween_property(elbow, "rotation:x", ik_staging.elbow_pitch, 0.45)
 	tween.parallel().tween_property(wrist, "rotation:x", ik_staging.wrist_pitch, 0.45)
 
-	# 2. Lower into slot bed (box bottom sits flush on tray floor)
-	tween.tween_property(shoulder, "rotation:x", ik_place.shoulder_pitch, 0.28)
-	tween.parallel().tween_property(elbow, "rotation:x", ik_place.elbow_pitch, 0.28)
-	tween.parallel().tween_property(wrist, "rotation:x", ik_place.wrist_pitch, 0.28)
+	# 2. Lower cleanly straight down into slot bed (box bottom sits flush on tray floor)
+	tween.tween_property(shoulder, "rotation:x", ik_place.shoulder_pitch, 0.30)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_place.elbow_pitch, 0.30)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_place.wrist_pitch, 0.30)
 
 	# 3. Open fingers and release payload cleanly into tray bed
 	if finger_left: tween.tween_property(finger_left, "position:x", -0.34, 0.18)
@@ -483,12 +488,18 @@ func execute_dynamic_stow() -> void:
 			SoundManager.play_spatial(self, SoundManager.sfx_box_stow, +1.0)
 	)
 
-	# 4. Retract and fold arm back to compact rest pose
-	tween.tween_interval(0.10)
-	tween.tween_property(arm, "rotation:y", REST_ARM_YAW, 0.38)
-	tween.parallel().tween_property(shoulder, "rotation:x", REST_SHOULDER_PITCH, 0.38)
-	tween.parallel().tween_property(elbow, "rotation:x", REST_ELBOW_PITCH, 0.38)
-	tween.parallel().tween_property(wrist, "rotation:x", REST_WRIST_PITCH, 0.38)
+	# 4. Lift vertically straight UP back to high clearance before swiveling!
+	# Prevents the gripper and fingers from dragging horizontally through the tray walls or divider!
+	tween.tween_interval(0.08)
+	tween.tween_property(shoulder, "rotation:x", ik_staging.shoulder_pitch, 0.28)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_staging.elbow_pitch, 0.28)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_staging.wrist_pitch, 0.28)
+
+	# 5. Now safely high above the tray, swivel arm back to front and fold to rest pose
+	tween.tween_property(arm, "rotation:y", REST_ARM_YAW, 0.35)
+	tween.parallel().tween_property(shoulder, "rotation:x", REST_SHOULDER_PITCH, 0.35)
+	tween.parallel().tween_property(elbow, "rotation:x", REST_ELBOW_PITCH, 0.35)
+	tween.parallel().tween_property(wrist, "rotation:x", REST_WRIST_PITCH, 0.35)
 	if finger_left: tween.parallel().tween_property(finger_left, "position:x", -REST_FINGER_SPAN, 0.30)
 	if finger_right: tween.parallel().tween_property(finger_right, "position:x", REST_FINGER_SPAN, 0.30)
 
@@ -510,7 +521,7 @@ func execute_dynamic_place() -> void:
 	# Place directly onto floor in front of chassis
 	var forward_dir: Vector3 = -global_transform.basis.z
 	var place_floor_world: Vector3 = global_position + forward_dir * 0.95 + Vector3(0.0, 0.16, 0.0)
-	var staging_world: Vector3 = place_floor_world + Vector3(0.0, 0.25, 0.0)
+	var staging_world: Vector3 = place_floor_world + Vector3(0.0, 0.35, 0.0)
 
 	var ik_staging = ArmIKSolver.solve_local(arm.to_local(staging_world))
 	var ik_place = ArmIKSolver.solve_local(arm.to_local(place_floor_world))
@@ -552,8 +563,13 @@ func execute_dynamic_place() -> void:
 			SoundManager.play_spatial(self, SoundManager.sfx_box_stow, 0.0)
 	)
 
-	# 4. Fold home to compact rest pose
-	tween.tween_interval(0.10)
+	# 4. Lift vertically back up above placed box before folding!
+	tween.tween_interval(0.08)
+	tween.tween_property(shoulder, "rotation:x", ik_staging.shoulder_pitch, 0.28)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_staging.elbow_pitch, 0.28)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_staging.wrist_pitch, 0.28)
+
+	# 5. Fold home to compact rest pose
 	tween.tween_property(arm, "rotation:y", REST_ARM_YAW, 0.35)
 	tween.parallel().tween_property(shoulder, "rotation:x", REST_SHOULDER_PITCH, 0.35)
 	tween.parallel().tween_property(elbow, "rotation:x", REST_ELBOW_PITCH, 0.35)
