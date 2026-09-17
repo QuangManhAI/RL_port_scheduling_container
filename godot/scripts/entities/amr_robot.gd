@@ -737,17 +737,21 @@ func execute_dynamic_unstow_and_place(target_deck_world: Vector3) -> bool:
 		if is_instance_valid(held_box):
 			placed_box_ref = held_box
 			var final_world_tform: Transform3D = held_box.global_transform
+			# Soft placement clearance: deck top is 0.61m + 0.16m half-height = 0.770m flush center.
+			# Clamping y >= 0.776m gives 6mm safety margin so it settles gently under gravity without penetration impulse.
+			final_world_tform.origin.y = max(final_world_tform.origin.y, 0.776)
 			held_box.get_parent().remove_child(held_box)
 			_get_world_root().add_child(held_box)
 			held_box.global_transform = final_world_tform
 			# Enable active live dynamics so the motorized conveyor belt transports it
 			held_box.freeze = false
+			held_box.can_sleep = false
 			held_box.sleeping = false
 			held_box.collision_layer = 8
 			held_box.collision_mask = 63
-			held_box.linear_velocity = Vector3(0.6, 0.0, 0.0)
+			held_box.linear_velocity = Vector3(0.6, -0.05, 0.0)
 			held_box.angular_velocity = Vector3.ZERO
-			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, Vector3(0.6, 0.0, 0.0))
+			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, Vector3(0.6, -0.05, 0.0))
 			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_ANGULAR_VELOCITY, Vector3.ZERO)
 			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, final_world_tform)
 			held_box = null

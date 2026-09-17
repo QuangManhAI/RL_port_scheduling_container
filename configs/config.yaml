@@ -7,7 +7,7 @@
 # ------------------------------------------------------------------------------
 clock:
   physics_fps: 200          # High-fidelity simulation physics clock (200 Hz, dt = 0.005s)
-  action_fps: 60         # RL policy action decision clock (60 Hz, dt = 0.01667s)
+  action_fps: 60            # RL policy action decision clock (60 Hz, dt = 0.01667s)
   render_fps: 0             # Display rendering clock (0 = unlocked / monitor refresh rate)
   ticks_per_action: 3.3333  # Fractional accumulator ratio (physics_fps / action_fps)
   time_scale: 1.0           # Global engine time multiplier
