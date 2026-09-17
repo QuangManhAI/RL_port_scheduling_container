@@ -1,7 +1,9 @@
-[gd_scene format=3 uid="uid://dpkgwxstqwfg"]
+[gd_scene load_steps=22 format=3 uid="uid://dpkgwxstqwfg"]
+
+[ext_resource type="Script" path="res://scripts/environment/conveyor_belt.gd" id="1_script"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_frame"]
-albedo_color = Color(0.16, 0.18, 0.22, 1)
+albedo_color = Color(0.14, 0.16, 0.20, 1)
 metallic = 0.8
 roughness = 0.35
 
@@ -12,102 +14,247 @@ size = Vector3(0.08, 0.56, 0.08)
 [sub_resource type="BoxShape3D" id="BoxShape3D_leg"]
 size = Vector3(0.08, 0.56, 0.08)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_bed"]
-albedo_color = Color(0.24, 0.27, 0.32, 1)
-metallic = 0.6
-roughness = 0.45
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_belt"]
+albedo_color = Color(0.12, 0.13, 0.15, 1)
+metallic = 0.1
+roughness = 0.85
 
 [sub_resource type="BoxMesh" id="BoxMesh_deck"]
-material = SubResource("StandardMaterial3D_bed")
-size = Vector3(1.8, 0.06, 0.9)
+material = SubResource("StandardMaterial3D_belt")
+size = Vector3(3.6, 0.08, 0.86)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_deck"]
-size = Vector3(1.8, 0.06, 0.9)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_roller"]
-albedo_color = Color(0.45, 0.50, 0.56, 1)
-metallic = 0.85
-roughness = 0.25
-
-[sub_resource type="CylinderMesh" id="CylinderMesh_roller"]
-material = SubResource("StandardMaterial3D_roller")
-top_radius = 0.025
-bottom_radius = 0.025
-height = 1.76
+size = Vector3(3.6, 0.08, 0.86)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_rail"]
-albedo_color = Color(1.0, 0.65, 0.1, 1)
-metallic = 0.5
+albedo_color = Color(1.0, 0.62, 0.05, 1)
+metallic = 0.6
 roughness = 0.3
 
 [sub_resource type="BoxMesh" id="BoxMesh_rail_side"]
 material = SubResource("StandardMaterial3D_rail")
-size = Vector3(0.04, 0.12, 0.9)
+size = Vector3(0.04, 0.16, 0.86)
 
 [sub_resource type="BoxMesh" id="BoxMesh_rail_back"]
 material = SubResource("StandardMaterial3D_rail")
-size = Vector3(1.8, 0.12, 0.04)
+size = Vector3(3.6, 0.16, 0.04)
+
+[sub_resource type="BoxMesh" id="BoxMesh_rail_front_r"]
+material = SubResource("StandardMaterial3D_rail")
+size = Vector3(1.7, 0.16, 0.04)
+
+[sub_resource type="BoxMesh" id="BoxMesh_rail_front_l"]
+material = SubResource("StandardMaterial3D_rail")
+size = Vector3(0.9, 0.16, 0.04)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_roller"]
+albedo_color = Color(0.65, 0.70, 0.75, 1)
+metallic = 0.9
+roughness = 0.2
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_roller"]
+material = SubResource("StandardMaterial3D_roller")
+top_radius = 0.035
+bottom_radius = 0.035
+height = 0.84
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_chute"]
+albedo_color = Color(0.35, 0.38, 0.42, 1)
+metallic = 0.7
+roughness = 0.3
+
+[sub_resource type="BoxMesh" id="BoxMesh_chute"]
+material = SubResource("StandardMaterial3D_chute")
+size = Vector3(0.65, 0.04, 0.84)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_container"]
+albedo_color = Color(0.15, 0.35, 0.65, 1)
+metallic = 0.4
+roughness = 0.5
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_truck_cab"]
+albedo_color = Color(0.85, 0.25, 0.15, 1)
+metallic = 0.5
+roughness = 0.4
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tire"]
+albedo_color = Color(0.08, 0.08, 0.09, 1)
+roughness = 0.9
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_tire"]
+material = SubResource("StandardMaterial3D_tire")
+top_radius = 0.22
+bottom_radius = 0.22
+height = 0.18
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_truck_cargo"]
+size = Vector3(1.6, 0.8, 1.2)
 
 [node name="ConveyorTable" type="StaticBody3D"]
 collision_layer = 2
 collision_mask = 63
+script = ExtResource("1_script")
 
 [node name="ColDeck" type="CollisionShape3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.57, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.57, 0)
 shape = SubResource("BoxShape3D_deck")
 
 [node name="MeshDeck" type="MeshInstance3D" parent="ColDeck"]
 mesh = SubResource("BoxMesh_deck")
 
-[node name="ColLegFL" type="CollisionShape3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.84, 0.28, -0.39)
+[node name="ColLegL1" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.24, 0.28, -0.38)
 shape = SubResource("BoxShape3D_leg")
 
-[node name="MeshLegFL" type="MeshInstance3D" parent="ColLegFL"]
+[node name="MeshLegL1" type="MeshInstance3D" parent="ColLegL1"]
 mesh = SubResource("BoxMesh_leg")
 
-[node name="ColLegFR" type="CollisionShape3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.84, 0.28, -0.39)
+[node name="ColLegL2" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.24, 0.28, 0.38)
 shape = SubResource("BoxShape3D_leg")
 
-[node name="MeshLegFR" type="MeshInstance3D" parent="ColLegFR"]
+[node name="MeshLegL2" type="MeshInstance3D" parent="ColLegL2"]
 mesh = SubResource("BoxMesh_leg")
 
-[node name="ColLegBL" type="CollisionShape3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.84, 0.28, 0.39)
+[node name="ColLegM1" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.28, -0.38)
 shape = SubResource("BoxShape3D_leg")
 
-[node name="MeshLegBL" type="MeshInstance3D" parent="ColLegBL"]
+[node name="MeshLegM1" type="MeshInstance3D" parent="ColLegM1"]
 mesh = SubResource("BoxMesh_leg")
 
-[node name="ColLegBR" type="CollisionShape3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.84, 0.28, 0.39)
+[node name="ColLegM2" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.28, 0.38)
 shape = SubResource("BoxShape3D_leg")
 
-[node name="MeshLegBR" type="MeshInstance3D" parent="ColLegBR"]
+[node name="MeshLegM2" type="MeshInstance3D" parent="ColLegM2"]
+mesh = SubResource("BoxMesh_leg")
+
+[node name="ColLegR1" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.24, 0.28, -0.38)
+shape = SubResource("BoxShape3D_leg")
+
+[node name="MeshLegR1" type="MeshInstance3D" parent="ColLegR1"]
+mesh = SubResource("BoxMesh_leg")
+
+[node name="ColLegR2" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.24, 0.28, 0.38)
+shape = SubResource("BoxShape3D_leg")
+
+[node name="MeshLegR2" type="MeshInstance3D" parent="ColLegR2"]
 mesh = SubResource("BoxMesh_leg")
 
 [node name="RailLeft" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.88, 0.63, 0)
-mesh = SubResource("BoxMesh_rail_side")
-
-[node name="RailRight" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.88, 0.63, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.28, 0.65, 0)
 mesh = SubResource("BoxMesh_rail_side")
 
 [node name="RailBack" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.63, 0.43)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.65, 0.41)
 mesh = SubResource("BoxMesh_rail_back")
+
+[node name="RailFrontL" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.85, 0.65, -0.41)
+mesh = SubResource("BoxMesh_rail_front_l")
+
+[node name="RailFrontR" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.45, 0.65, -0.41)
+mesh = SubResource("BoxMesh_rail_front_r")
+
+[node name="Roller1" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, -1, 0, 1, -4.37114e-08, -1.2, 0.61, 0)
+mesh = SubResource("CylinderMesh_roller")
+
+[node name="Roller2" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, -1, 0, 1, -4.37114e-08, -0.5, 0.61, 0)
+mesh = SubResource("CylinderMesh_roller")
+
+[node name="Roller3" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, -1, 0, 1, -4.37114e-08, 0.5, 0.61, 0)
+mesh = SubResource("CylinderMesh_roller")
+
+[node name="Roller4" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, -1, 0, 1, -4.37114e-08, 1.5, 0.61, 0)
+mesh = SubResource("CylinderMesh_roller")
+
+[node name="Roller5" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, -1, 0, 1, -4.37114e-08, 2.2, 0.61, 0)
+mesh = SubResource("CylinderMesh_roller")
+
+[node name="Chute" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.92388, -0.382683, 0, 0.382683, 0.92388, 0, 0, 0, 1, 2.55, 0.45, 0)
+mesh = SubResource("BoxMesh_chute")
+
+[node name="TruckBed" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.8, 0, 0)
+
+[node name="ContainerFloor" type="MeshInstance3D" parent="TruckBed"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.24, 0)
+mesh = SubResource("BoxMesh_deck")
+
+[node name="ContainerWallL" type="CSGBox3D" parent="TruckBed"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.72, -0.48)
+size = Vector3(2.4, 0.92, 0.06)
+material = SubResource("StandardMaterial3D_container")
+
+[node name="ContainerWallR" type="CSGBox3D" parent="TruckBed"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.72, 0.48)
+size = Vector3(2.4, 0.92, 0.06)
+material = SubResource("StandardMaterial3D_container")
+
+[node name="ContainerRoof" type="CSGBox3D" parent="TruckBed"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 0)
+size = Vector3(2.4, 0.06, 1.02)
+material = SubResource("StandardMaterial3D_container")
+
+[node name="TruckCab" type="CSGBox3D" parent="TruckBed"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0.65, 0)
+size = Vector3(1.1, 0.85, 0.95)
+material = SubResource("StandardMaterial3D_truck_cab")
+
+[node name="WheelR1" type="MeshInstance3D" parent="TruckBed"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.6, 0.22, 0.54)
+mesh = SubResource("CylinderMesh_tire")
+
+[node name="WheelR2" type="MeshInstance3D" parent="TruckBed"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6, 0.22, 0.54)
+mesh = SubResource("CylinderMesh_tire")
+
+[node name="WheelL1" type="MeshInstance3D" parent="TruckBed"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.6, 0.22, -0.54)
+mesh = SubResource("CylinderMesh_tire")
+
+[node name="WheelL2" type="MeshInstance3D" parent="TruckBed"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6, 0.22, -0.54)
+mesh = SubResource("CylinderMesh_tire")
+
+[node name="CargoArea" type="Area3D" parent="TruckBed"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+collision_layer = 0
+collision_mask = 8
+
+[node name="ColCargo" type="CollisionShape3D" parent="TruckBed/CargoArea"]
+shape = SubResource("BoxShape3D_truck_cargo")
+
+[node name="TruckLabel" type="Label3D" parent="TruckBed"]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 0, 0.95, 0.52)
+billboard = 0
+modulate = Color(1, 0.9, 0.2, 1)
+outline_modulate = Color(0, 0, 0, 1)
+text = "OUTBOUND CARGO TRUCK
+FREIGHT ID: #LOG-882"
+font_size = 14
+outline_size = 4
 
 [node name="DropTargetMarker" type="Marker3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.77, -0.05)
 
 [node name="StationLabel" type="Label3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.15, 0.43)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 1.35, 0.43)
 billboard = 1
 modulate = Color(0.2, 0.85, 1, 1)
 outline_modulate = Color(0, 0, 0, 1)
-text = "[OUTBOUND CONVEYOR]
-STATION #01 — PACK & SHIP"
+text = "[OUTBOUND CONVEYOR SYSTEM]
+MOTORIZED BELT ACTIVE (1.2 m/s)
+DESTINATION: FREIGHT TRUCK #LOG-882"
 font_size = 15
 outline_size = 5

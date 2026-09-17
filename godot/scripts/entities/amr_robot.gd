@@ -133,19 +133,11 @@ func _process(_delta: float) -> void:
 ## Physical Sensor & Scene Queries for Payload Presence in Cargo Tray
 func get_slot_box(slot_idx: int) -> ToteBox:
 	var marker: Marker3D = slot_1_marker if slot_idx == 0 else slot_2_marker
-	if cargo_tray:
+	if cargo_tray and marker:
 		for child in cargo_tray.get_children():
 			if child is ToteBox and is_instance_valid(child) and child != held_box and child.visible:
-				if marker:
-					if child.position.distance_to(marker.position) < 0.35:
-						return child
-				else:
+				if child.position.distance_to(marker.position) < 0.28:
 					return child
-	var sensor: Area3D = slot_1_sensor if slot_idx == 0 else slot_2_sensor
-	if sensor:
-		for body in sensor.get_overlapping_bodies():
-			if body is ToteBox and is_instance_valid(body) and body != held_box and body.visible:
-				return body
 	return null
 
 func is_slot_occupied(slot_idx: int) -> bool:
@@ -153,8 +145,10 @@ func is_slot_occupied(slot_idx: int) -> bool:
 
 func get_stowed_box_count() -> int:
 	var count: int = 0
-	if is_slot_occupied(0): count += 1
-	if is_slot_occupied(1): count += 1
+	if cargo_tray:
+		for child in cargo_tray.get_children():
+			if child is ToteBox and is_instance_valid(child) and child != held_box and child.visible:
+				count += 1
 	return count
 
 func get_first_empty_slot() -> int:
@@ -643,6 +637,7 @@ func execute_dynamic_unstow_and_place(target_deck_world: Vector3) -> bool:
 				break
 
 	if not box_to_place or not is_instance_valid(box_to_place):
+		print("[UNSTOW REJECTED] box_to_place is null or invalid! tray_children=%d" % (cargo_tray.get_child_count() if cargo_tray else 0))
 		SoundManager.play_spatial(self, SoundManager.sfx_cancel, -2.0)
 		return false
 
@@ -656,6 +651,9 @@ func execute_dynamic_unstow_and_place(target_deck_world: Vector3) -> bool:
 	var ik_deck_place = ArmIKSolver.solve_local(arm.to_local(target_deck_world))
 
 	if not ik_deck_place.success or not ik_deck_staging.success:
+		print("[UNSTOW REJECTED] ik_deck_place=%s ik_deck_staging=%s err=%s target=%s" % [
+			str(ik_deck_place.success), str(ik_deck_staging.success), ik_deck_place.error_message, str(target_deck_world)
+		])
 		_is_arm_tweening = false
 		arm_motion_state = ArmMotionState.STATIONARY
 		set_amr_state(AmrState.IDLE)
@@ -742,16 +740,16 @@ func execute_dynamic_unstow_and_place(target_deck_world: Vector3) -> bool:
 			held_box.get_parent().remove_child(held_box)
 			_get_world_root().add_child(held_box)
 			held_box.global_transform = final_world_tform
-			# Statically freeze on conveyor deck to prevent bounce, flight, or physics drift
-			held_box.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
-			held_box.freeze = true
-			held_box.sleeping = true
+			# Enable active live dynamics so the motorized conveyor belt transports it
+			held_box.freeze = false
+			held_box.sleeping = false
+			held_box.collision_layer = 8
 			held_box.collision_mask = 63
-			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, Vector3.ZERO)
+			held_box.linear_velocity = Vector3(0.6, 0.0, 0.0)
+			held_box.angular_velocity = Vector3.ZERO
+			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, Vector3(0.6, 0.0, 0.0))
 			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_ANGULAR_VELOCITY, Vector3.ZERO)
 			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, final_world_tform)
-			held_box.linear_velocity = Vector3.ZERO
-			held_box.angular_velocity = Vector3.ZERO
 			held_box = null
 			SoundManager.play_spatial(self, SoundManager.sfx_box_stow, +1.0)
 	)

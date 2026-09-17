@@ -65,6 +65,7 @@ var box_dropped: bool = false
 var total_placed_boxes: int = 0
 var initial_stowed_count: int = 0
 var is_full_tray_mode: bool = false
+var dispatch_strategy: String = "auto"
 
 var last_ik_dist: float = 0.0
 var last_ik_err: String = ""
@@ -149,6 +150,7 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 	total_placed_boxes = 0
 	initial_stowed_count = 0
 	is_full_tray_mode = false
+	dispatch_strategy = str(last_reset_msg.get("dispatch_strategy", "auto"))
 
 	if last_reset_msg.get("full_tray", false) or difficulty >= 2.0:
 		is_full_tray_mode = true
@@ -167,6 +169,8 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 	if conveyor:
 		conveyor.global_position = Vector3(0.0, 0.0, 4.0)
 		conveyor.rotation = Vector3.ZERO
+		if conveyor.has_method("reset_conveyor"):
+			conveyor.reset_conveyor()
 
 	# 3. Spawn AMR in mid-bay corridor (between rack and conveyor)
 	if amr:
@@ -286,12 +290,27 @@ func _get_target_box_pos() -> Vector3:
 	return rack.to_global(s_def["offset"]) if rack else (Vector3(0.0, 0.0, -4.0) + s_def["offset"])
 
 func _get_conveyor_drop_pos() -> Vector3:
-	var slot_idx: int = clampi(total_placed_boxes, 0, CONVEYOR_SLOTS.size() - 1)
-	if conveyor:
-		return conveyor.to_global(CONVEYOR_SLOTS[slot_idx])
-	elif drop_target_marker:
-		return drop_target_marker.global_position + Vector3(CONVEYOR_SLOTS[slot_idx].x, 0.0, 0.0)
-	return Vector3(CONVEYOR_SLOTS[slot_idx].x, 0.77, 3.95)
+	if drop_target_marker:
+		return drop_target_marker.global_position
+	elif conveyor:
+		return conveyor.to_global(Vector3(0.0, 0.77, -0.05))
+	return Vector3(0.0, 0.77, 3.95)
+
+func _get_dist_to_conveyor() -> float:
+	if not amr:
+		return 8.0
+	var c_pos = drop_target_marker.global_position if drop_target_marker else Vector3(0.0, 0.77, 3.95)
+	var diff = amr.global_position - c_pos
+	diff.y = 0.0
+	return diff.length()
+
+func _get_box_pos_by_idx(idx: int) -> Vector3:
+	if idx >= 0 and idx < boxes.size() and boxes[idx] and is_instance_valid(boxes[idx]):
+		return boxes[idx].global_position
+	if idx >= 0 and idx < TOTE_SLOT_DEFS.size():
+		var s_def = TOTE_SLOT_DEFS[idx]
+		return rack.to_global(s_def["offset"]) if rack else (Vector3(0.0, 0.0, -4.0) + s_def["offset"])
+	return Vector3.ZERO
 
 func _get_active_subgoal_pos() -> Vector3:
 	if current_sub_stage in [CycleSubStage.NAVIGATE_TO_RACK, CycleSubStage.DOCK_AND_PICK, CycleSubStage.TRAY_STOW]:
@@ -454,16 +473,36 @@ func _physics_process(delta: float) -> void:
 				current_sub_stage = CycleSubStage.TRAY_STOW
 				amr.execute_dynamic_stow()
 
-		# Auto-chain: Stowed in tray -> Pick 2nd box if tray has slot OR Navigate Carrying
+		# Auto-chain: Stowed in tray -> Autonomous Decision: Batch (Fill Tray) vs Immediate (Move Out)
 		if current_sub_stage == CycleSubStage.TRAY_STOW:
 			if amr.get_stowed_box_count() > 0 and not amr._is_arm_tweening:
 				# Pop the box that was just stowed from the manifest
 				if not delivery_manifest.is_empty():
 					delivery_manifest.pop_front()
 
-				if amr.get_stowed_box_count() < 2 and not delivery_manifest.is_empty():
-					# Tray still has an empty slot (Slot 2) and manifest has more boxes!
-					# Pick the next box from the rack into the tray before driving to conveyor!
+				var can_batch: bool = (amr.get_stowed_box_count() < 2 and not delivery_manifest.is_empty())
+				var choose_batch: bool = false
+
+				if can_batch:
+					if dispatch_strategy == "batch":
+						choose_batch = true
+					elif dispatch_strategy == "immediate":
+						choose_batch = false
+					else:
+						# "auto" Cost-Effectiveness Evaluation:
+						# Evaluate transit cost delta:
+						# Cost of batching (drive to next rack box + drive to conveyor)
+						# vs Cost of immediate delivery (drive to conveyor + round-trip back to next rack + drive to conveyor)
+						var next_target = delivery_manifest[0]
+						var next_box_pos = _get_box_pos_by_idx(next_target)
+						var dist_to_next_rack = amr.global_position.distance_to(next_box_pos)
+						var dist_to_conveyor = _get_dist_to_conveyor()
+
+						var cost_batch = dist_to_next_rack + dist_to_conveyor
+						var cost_immediate = (2.0 * dist_to_conveyor) + dist_to_next_rack
+						choose_batch = (cost_batch < cost_immediate)
+
+				if choose_batch:
 					target_box_idx = delivery_manifest[0]
 					_update_active_target_box()
 					is_picked = false
@@ -471,8 +510,6 @@ func _physics_process(delta: float) -> void:
 					current_sub_stage = CycleSubStage.NAVIGATE_TO_RACK
 					prev_sub_goal_dist = _get_dist_to_active_subgoal()
 				else:
-					# Tray is FULL (2/2) or manifest has no more boxes:
-					# Now drive across the bay to conveyor table with full batch!
 					is_stowed = true
 					current_sub_stage = CycleSubStage.NAVIGATE_CARRYING
 					prev_sub_goal_dist = _get_dist_to_active_subgoal()
@@ -483,9 +520,17 @@ func _physics_process(delta: float) -> void:
 				total_placed_boxes += 1
 
 				if amr.get_stowed_box_count() > 0:
-					# Unstow the second box from the tray onto the next conveyor slot!
+					# Unstow the second box from the tray onto the conveyor!
 					var next_pos = _get_conveyor_drop_pos()
-					amr.execute_dynamic_unstow_and_place(next_pos)
+					var started: bool = amr.execute_dynamic_unstow_and_place(next_pos)
+					if not started:
+						print("[UNSTOW RECOVERY] Could not unstow remaining box, transitioning out")
+						if is_full_tray_mode or delivery_manifest.is_empty():
+							is_placed = true
+							cycle_success = true
+							current_sub_stage = CycleSubStage.CYCLE_COMPLETE
+						else:
+							current_sub_stage = CycleSubStage.NAVIGATE_TO_RACK
 				elif is_full_tray_mode or delivery_manifest.is_empty():
 					# All boxes delivered!
 					is_placed = true
@@ -672,4 +717,5 @@ func _get_info() -> Dictionary:
 		"cargo_tray_attached": (amr.cargo_tray != null and amr.cargo_tray.get_parent() != null and amr.cargo_tray.get_parent().name == "Chassis"),
 		"all_boxes_transported": (is_placed and (amr.get_stowed_box_count() if amr else 0) == 0 and delivery_manifest.is_empty()),
 		"box_dropped": box_dropped,
+		"dispatch_strategy": dispatch_strategy,
 	}

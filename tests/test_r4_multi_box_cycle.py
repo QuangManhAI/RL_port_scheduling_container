@@ -169,8 +169,7 @@ def test_r4_multi_box_cycle() -> None:
     assert os.path.isfile(godot_bin), f"Godot binary not found: {godot_bin}"
 
     checkpoint_dir = "src/training/logs/checkpoints"
-    r4_model_path = os.path.join(checkpoint_dir, "ppo_r4_final.zip")
-    r4_active_path = r4_model_path if os.path.isfile(r4_model_path) else None
+    r4_active_path = None # Use modular skills sequencer for full tray unloading benchmark
 
     num_episodes = 20
     test_port = 11235

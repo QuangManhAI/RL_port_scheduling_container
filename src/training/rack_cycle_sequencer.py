@@ -122,6 +122,44 @@ class RackCycleSequencer:
             v_lin = float(np.clip((dist_to_goal - 1.35) * 1.2, 0.05, 0.45))
             return np.array([v_lin, v_ang, -1.0], dtype=np.float32)
 
+    def evaluate_dispatch_decision(
+        self,
+        dist_to_next_rack: float,
+        dist_to_conveyor: float,
+        tray_stowed_count: int,
+        manifest_remaining: int,
+        strategy: str = "auto",
+    ) -> Dict[str, Any]:
+        """Evaluates cost-effectiveness of filling the cargo tray vs moving out to delivery."""
+        can_batch = (tray_stowed_count < 2 and manifest_remaining > 0)
+        if not can_batch:
+            return {
+                "decision": "move_out",
+                "reason": "Tray full or manifest empty",
+                "cost_batch": 0.0,
+                "cost_immediate": 0.0,
+                "savings": 0.0,
+            }
+
+        cost_batch = dist_to_next_rack + dist_to_conveyor
+        cost_immediate = (2.0 * dist_to_conveyor) + dist_to_next_rack
+        savings = cost_immediate - cost_batch
+
+        if strategy == "batch":
+            decision = "fill_tray"
+        elif strategy == "immediate":
+            decision = "move_out"
+        else:
+            decision = "fill_tray" if cost_batch < cost_immediate else "move_out"
+
+        return {
+            "decision": decision,
+            "cost_batch": cost_batch,
+            "cost_immediate": cost_immediate,
+            "savings": savings,
+            "reason": f"Saves {savings:.1f}m transit" if decision == "fill_tray" else "Immediate delivery selected",
+        }
+
 
 def run_cycle_evaluation(
     episodes: int = 50,
