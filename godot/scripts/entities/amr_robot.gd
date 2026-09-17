@@ -734,23 +734,24 @@ func execute_dynamic_unstow_and_place(target_deck_world: Vector3) -> bool:
 	if finger_left: tween.tween_property(finger_left, "position:x", -0.34, 0.18)
 	if finger_right: tween.parallel().tween_property(finger_right, "position:x", 0.34, 0.18)
 
+	var placed_box_ref: ToteBox = null
 	tween.tween_callback(func():
 		if is_instance_valid(held_box):
+			placed_box_ref = held_box
 			var final_world_tform: Transform3D = held_box.global_transform
 			held_box.get_parent().remove_child(held_box)
 			_get_world_root().add_child(held_box)
 			held_box.global_transform = final_world_tform
-			held_box.freeze = false
-			held_box.sleeping = false
-			held_box.collision_mask = 63 # Restore full physics collision on conveyor deck
-			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_SLEEPING, false)
+			# Statically freeze on conveyor deck to prevent bounce, flight, or physics drift
+			held_box.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
+			held_box.freeze = true
+			held_box.sleeping = true
+			held_box.collision_mask = 63
+			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, Vector3.ZERO)
+			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_ANGULAR_VELOCITY, Vector3.ZERO)
+			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, final_world_tform)
 			held_box.linear_velocity = Vector3.ZERO
 			held_box.angular_velocity = Vector3.ZERO
-			remove_collision_exception_with(held_box)
-			held_box.remove_collision_exception_with(self)
-			if tray_body:
-				held_box.remove_collision_exception_with(tray_body)
-				tray_body.remove_collision_exception_with(held_box)
 			held_box = null
 			SoundManager.play_spatial(self, SoundManager.sfx_box_stow, +1.0)
 	)
@@ -773,6 +774,13 @@ func execute_dynamic_unstow_and_place(target_deck_world: Vector3) -> bool:
 		_is_arm_tweening = false
 		arm_motion_state = ArmMotionState.STATIONARY
 		set_amr_state(AmrState.IDLE)
+		# Defer collision exception cleanup until arm is safely folded back home
+		if is_instance_valid(placed_box_ref):
+			remove_collision_exception_with(placed_box_ref)
+			placed_box_ref.remove_collision_exception_with(self)
+			if tray_body:
+				placed_box_ref.remove_collision_exception_with(tray_body)
+				tray_body.remove_collision_exception_with(placed_box_ref)
 		_arm_status_text = "📦 Box Placed on Conveyor! Mission Complete"
 		_update_dev_status_label()
 	)

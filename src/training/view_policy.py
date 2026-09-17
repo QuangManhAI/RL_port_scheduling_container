@@ -138,16 +138,14 @@ def main() -> None:
     model: Optional[PPO] = None
 
     if is_r4:
-        # Auto-select sequencer if requested or if manifest/extended delivery is used
-        has_r4_model = os.path.isfile(model_path)
-        if args.sequencer or args.manifest or args.delivery_count > 0 or args.multi_box or not has_r4_model:
-            use_sequencer = True
-            active_model = model_path if (has_r4_model and not args.sequencer) else None
-            sequencer = RackCycleSequencer(r4_policy_path=active_model)
-            print(f">> Stage R4 Sequencer Active (End-to-end model: {active_model})")
+        user_specified_model = bool(args.model and os.path.isfile(args.model))
+        if user_specified_model and not args.sequencer:
+            print(f">> Loading User-Specified PPO Model: {args.model}")
+            model = PPO.load(args.model, device="cpu")
         else:
-            print(f">> Loading Unified End-to-End PPO Model: {model_path}")
-            model = PPO.load(model_path, device="cpu")
+            use_sequencer = True
+            sequencer = RackCycleSequencer(r4_policy_path=None)
+            print(">> Stage R4 Modular Sequencer Active (Reliable Multi-Box Chained Skills)")
     else:
         if not os.path.isfile(model_path):
             s1_fallback = "src/training/logs/checkpoints/ppo_s1_final.zip"
