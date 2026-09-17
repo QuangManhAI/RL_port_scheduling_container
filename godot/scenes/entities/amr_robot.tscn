@@ -1,4 +1,4 @@
-[gd_scene load_steps=38 format=3 uid="uid://dmx3amr002"]
+[gd_scene load_steps=44 format=3 uid="uid://dmx3amr002"]
 
 [ext_resource type="Script" path="res://scripts/entities/amr_robot.gd" id="1_script"]
 
@@ -151,6 +151,26 @@ ring_segments = 16
 [sub_resource type="BoxShape3D" id="BoxShape3D_chassis"]
 size = Vector3(0.95, 0.32, 1.45)
 
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_pedestal"]
+height = 0.2
+radius = 0.18
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_turret"]
+height = 0.1
+radius = 0.24
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_arm_boom"]
+size = Vector3(0.14, 1.02, 0.16)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_arm_forearm"]
+size = Vector3(0.12, 0.86, 0.14)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_gripper"]
+size = Vector3(0.28, 0.08, 0.14)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_finger"]
+size = Vector3(0.04, 0.26, 0.14)
+
 [node name="AmrRobot" type="CharacterBody3D"]
 collision_layer = 4
 collision_mask = 7
@@ -246,8 +266,15 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.38, -0.42)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
 mesh = SubResource("CylinderMesh_pedestal")
 
+[node name="ColPedestal" type="CollisionShape3D" parent="RoboticArm"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
+shape = SubResource("CylinderShape3D_pedestal")
+
 [node name="TurretBase" type="MeshInstance3D" parent="RoboticArm"]
 mesh = SubResource("CylinderMesh_turret")
+
+[node name="ColTurret" type="CollisionShape3D" parent="RoboticArm"]
+shape = SubResource("CylinderShape3D_turret")
 
 [node name="ShoulderJoint" type="Node3D" parent="RoboticArm"]
 transform = Transform3D(1, 0, 0, 0, 0.906308, -0.422618, 0, 0.422618, 0.906308, 0, 0.18, 0)
@@ -256,6 +283,10 @@ transform = Transform3D(1, 0, 0, 0, 0.906308, -0.422618, 0, 0.422618, 0.906308, 
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.51, 0)
 mesh = SubResource("BoxMesh_arm_boom")
 
+[node name="ColBoom" type="CollisionShape3D" parent="RoboticArm/ShoulderJoint"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.51, 0)
+shape = SubResource("BoxShape3D_arm_boom")
+
 [node name="ElbowJoint" type="Node3D" parent="RoboticArm/ShoulderJoint"]
 transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 1.02, 0)
 
@@ -263,12 +294,20 @@ transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.43, 0)
 mesh = SubResource("BoxMesh_arm_forearm")
 
+[node name="ColForearm" type="CollisionShape3D" parent="RoboticArm/ShoulderJoint/ElbowJoint"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.43, 0)
+shape = SubResource("BoxShape3D_arm_forearm")
+
 [node name="WristJoint" type="Node3D" parent="RoboticArm/ShoulderJoint/ElbowJoint"]
 transform = Transform3D(1, 0, 0, 0, 0.866025, -0.5, 0, 0.5, 0.866025, 0, 0.86, 0)
 
 [node name="GripperBase" type="MeshInstance3D" parent="RoboticArm/ShoulderJoint/ElbowJoint/WristJoint"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.04, 0)
 mesh = SubResource("BoxMesh_gripper_base")
+
+[node name="ColGripper" type="CollisionShape3D" parent="RoboticArm/ShoulderJoint/ElbowJoint/WristJoint"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.04, 0)
+shape = SubResource("BoxShape3D_gripper")
 
 [node name="GuideBar" type="MeshInstance3D" parent="RoboticArm/ShoulderJoint/ElbowJoint/WristJoint"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.08, 0)
@@ -284,6 +323,10 @@ mesh = SubResource("BoxMesh_finger_bracket")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.13, 0)
 mesh = SubResource("BoxMesh_finger")
 
+[node name="ColFingerLeft" type="CollisionShape3D" parent="RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/FingerLeft"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.13, 0)
+shape = SubResource("BoxShape3D_finger")
+
 [node name="PadMesh" type="MeshInstance3D" parent="RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/FingerLeft"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.02, 0.13, 0)
 mesh = SubResource("BoxMesh_pad")
@@ -297,6 +340,10 @@ mesh = SubResource("BoxMesh_finger_bracket")
 [node name="FingerMesh" type="MeshInstance3D" parent="RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/FingerRight"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.13, 0)
 mesh = SubResource("BoxMesh_finger")
+
+[node name="ColFingerRight" type="CollisionShape3D" parent="RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/FingerRight"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.13, 0)
+shape = SubResource("BoxShape3D_finger")
 
 [node name="PadMesh" type="MeshInstance3D" parent="RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/FingerRight"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.02, 0.13, 0)
