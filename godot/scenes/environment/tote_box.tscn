@@ -18,9 +18,10 @@ size = Vector3(0.58, 0.32, 0.38)
 collision_layer = 8
 collision_mask = 63
 mass = 12.0
+can_sleep = false
 continuous_cd = true
 linear_damp = 0.8
-angular_damp = 1.2
+angular_damp = 2.5
 script = ExtResource("1_script")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
