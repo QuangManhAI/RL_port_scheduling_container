@@ -83,6 +83,7 @@ def main() -> None:
     parser.add_argument("--multi-box", action="store_true", help="Enable multi-box delivery manifest for Stage R4")
     parser.add_argument("--full-tray", action="store_true", help="Pre-stow 2 boxes in CargoTray for immediate transit")
     parser.add_argument("--sequencer", action="store_true", help="Force modular RackCycleSequencer orchestration for Stage R4")
+    parser.add_argument("--dispatch-strategy", type=str, default="auto", choices=["auto", "batch", "immediate"], help="Dispatch strategy for R4 tray fill vs delivery decision (auto: cost-benefit evaluation, batch: fill tray, immediate: single box)")
 
     args = parser.parse_args()
 
@@ -163,6 +164,7 @@ def main() -> None:
     print(f"  Mode:                        {'Connect to open Godot Editor (F6)' if args.connect else 'Spawn new Visual Godot Window'}")
     print(f"  Simulation Clock (Physics):  {args.physics_fps} Hz")
     print(f"  Action Decision Clock:       {action_hz:.1f} Hz")
+    print(f"  Dispatch Strategy:           {args.dispatch_strategy.upper()}")
     print(f"  Port:                        {args.port}")
     print(f"===========================================================\n")
 
@@ -182,7 +184,7 @@ def main() -> None:
     )
 
     # Build reset options
-    reset_options: Dict[str, Any] = {"difficulty": args.difficulty}
+    reset_options: Dict[str, Any] = {"difficulty": args.difficulty, "dispatch_strategy": args.dispatch_strategy}
     if args.manifest:
         reset_options["manifest"] = [int(x.strip()) for x in args.manifest.split(",") if x.strip().isdigit()]
     if args.delivery_count > 0:
