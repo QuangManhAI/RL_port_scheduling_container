@@ -15,8 +15,10 @@ from typing import List
 
 import numpy as np
 
-# Ensure project root is in sys.path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from pathlib import Path
+project_root = str(Path(__file__).resolve().parents[3])
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from src.envs.fleet.fleet_mappo_gym_env import FleetMappoGymEnv
 from src.training.fleet.mappo_agent import MappoAgent, MultiAgentRolloutBuffer
