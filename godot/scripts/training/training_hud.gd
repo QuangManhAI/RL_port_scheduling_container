@@ -22,7 +22,9 @@ func _ready() -> void:
 	if p is TrainingEnvBase:
 		env_node = p
 		var s_name: String = p.name
-		if s_name == "TrainingRackPick":
+		if s_name == "TrainingRackCycle":
+			title_label.text = "STAGE R4: FULL RACK CYCLE (PICK & CONVEYOR DROPOFF)"
+		elif s_name == "TrainingRackPick":
 			title_label.text = "STAGE R3: RACK BOX PICK & STOW (RL TRAINING)"
 		elif s_name == "TrainingRackTargeting":
 			title_label.text = "STAGE R2: TIER TARGETING & DOCKING (RL TRAINING)"

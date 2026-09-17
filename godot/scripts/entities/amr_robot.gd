@@ -100,6 +100,7 @@ var _rl_target_v_ang: float = 0.0
 var _manual_angular_vel: float = 0.0
 var last_arm_hit: String = ""
 var arm_tween_speed_scale: float = 1.0
+var _current_arm_tween: Tween = null
 
 func _ready() -> void:
 	_led_material = StandardMaterial3D.new()
@@ -370,6 +371,7 @@ func execute_dynamic_pick(target_box: ToteBox) -> void:
 	_update_dev_status_label()
 
 	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_current_arm_tween = tween
 	if arm_tween_speed_scale != 1.0:
 		tween.set_speed_scale(arm_tween_speed_scale)
 
@@ -484,6 +486,7 @@ func execute_dynamic_stow() -> void:
 	_update_dev_status_label()
 
 	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	_current_arm_tween = tween
 	if arm_tween_speed_scale != 1.0:
 		tween.set_speed_scale(arm_tween_speed_scale)
 
@@ -513,6 +516,8 @@ func execute_dynamic_stow() -> void:
 			held_box.freeze = true
 			held_box.sleeping = false
 			held_box.set_collision_mask_value(2, true)
+			add_collision_exception_with(held_box)
+			held_box.add_collision_exception_with(self)
 			held_box = null
 
 			SoundManager.play_spatial(self, SoundManager.sfx_box_stow, +1.0)
@@ -614,6 +619,149 @@ func execute_dynamic_place() -> void:
 		_arm_status_text = "Box Placed! [WASD] Drive | Click/E: Pick"
 		_update_dev_status_label()
 	)
+
+func execute_dynamic_unstow_and_place(target_deck_world: Vector3) -> bool:
+	if _is_arm_tweening:
+		return false
+
+	# Locate box in cargo tray or in gripped socket
+	var box_to_place: ToteBox = null
+	if held_box != null:
+		box_to_place = held_box
+	elif cargo_tray:
+		for child in cargo_tray.get_children():
+			if child is ToteBox:
+				box_to_place = child
+				break
+
+	if not box_to_place or not is_instance_valid(box_to_place):
+		SoundManager.play_spatial(self, SoundManager.sfx_cancel, -2.0)
+		return false
+
+	_is_arm_tweening = true
+	arm_motion_state = ArmMotionState.PLACING
+	set_amr_state(AmrState.LIFTING)
+
+	# High clearance staging waypoint above conveyor deck (+0.28m)
+	var deck_staging_world = target_deck_world + Vector3(0.0, 0.28, 0.0)
+	var ik_deck_staging = ArmIKSolver.solve_local(arm.to_local(deck_staging_world))
+	var ik_deck_place = ArmIKSolver.solve_local(arm.to_local(target_deck_world))
+
+	if not ik_deck_place.success or not ik_deck_staging.success:
+		_is_arm_tweening = false
+		arm_motion_state = ArmMotionState.STATIONARY
+		set_amr_state(AmrState.IDLE)
+		SoundManager.play_spatial(self, SoundManager.sfx_cancel, -2.0)
+		_arm_status_text = "⚠️ Kinematic Reach Exception at Conveyor"
+		_update_dev_status_label()
+		return false
+
+	_arm_status_text = "Unstowing & Placing box on conveyor..."
+	_update_dev_status_label()
+
+	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_current_arm_tween = tween
+	if arm_tween_speed_scale != 1.0:
+		tween.set_speed_scale(arm_tween_speed_scale)
+
+	# If box is already held in socket, skip tray re-grasp and proceed directly to deck placement
+	if held_box == null:
+		var slot_world = box_to_place.global_position
+		var slot_staging_world = slot_world + Vector3(0.0, 0.52, 0.0)
+		var ik_tray_staging = ArmIKSolver.solve_local(arm.to_local(slot_staging_world))
+		var ik_tray_grip = ArmIKSolver.solve_local(arm.to_local(slot_world))
+
+		# 1. Open fingers & swivel 180 degrees backward over tray slot
+		tween.tween_property(arm, "rotation:y", ik_tray_staging.base_yaw, 0.40)
+		tween.parallel().tween_property(shoulder, "rotation:x", ik_tray_staging.shoulder_pitch, 0.40)
+		tween.parallel().tween_property(elbow, "rotation:x", ik_tray_staging.elbow_pitch, 0.40)
+		tween.parallel().tween_property(wrist, "rotation:x", ik_tray_staging.wrist_pitch, 0.40)
+		if finger_left: tween.parallel().tween_property(finger_left, "position:x", -0.34, 0.30)
+		if finger_right: tween.parallel().tween_property(finger_right, "position:x", 0.34, 0.30)
+
+		# 2. Lower fingers onto box in tray
+		tween.tween_property(shoulder, "rotation:x", ik_tray_grip.shoulder_pitch, 0.25)
+		tween.parallel().tween_property(elbow, "rotation:x", ik_tray_grip.elbow_pitch, 0.25)
+		tween.parallel().tween_property(wrist, "rotation:x", ik_tray_grip.wrist_pitch, 0.25)
+
+		# 3. Clamp fingers & socket box
+		if finger_left: tween.tween_property(finger_left, "position:x", -0.29, 0.18)
+		if finger_right: tween.parallel().tween_property(finger_right, "position:x", 0.29, 0.18)
+
+		tween.tween_callback(func():
+			if is_instance_valid(box_to_place):
+				held_box = box_to_place
+				held_box.freeze = true
+				if held_box.get_parent():
+					held_box.get_parent().remove_child(held_box)
+				gripped_socket.add_child(held_box)
+				held_box.transform = Transform3D.IDENTITY
+				held_box.set_collision_mask_value(2, false)
+				SoundManager.play_spatial(self, SoundManager.sfx_box_pick, +1.0)
+		)
+
+		# 4. Lift vertically back up above tray rails
+		tween.tween_interval(0.05)
+		tween.tween_property(shoulder, "rotation:x", ik_tray_staging.shoulder_pitch, 0.25)
+		tween.parallel().tween_property(elbow, "rotation:x", ik_tray_staging.elbow_pitch, 0.25)
+		tween.parallel().tween_property(wrist, "rotation:x", ik_tray_staging.wrist_pitch, 0.25)
+
+	# 5. Swivel forward 180 degrees to conveyor deck staging waypoint
+	tween.tween_property(arm, "rotation:y", ik_deck_staging.base_yaw, 0.45)
+	tween.parallel().tween_property(shoulder, "rotation:x", ik_deck_staging.shoulder_pitch, 0.45)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_deck_staging.elbow_pitch, 0.45)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_deck_staging.wrist_pitch, 0.45)
+
+	# 6. Lower cleanly flush onto conveyor deck
+	tween.tween_property(shoulder, "rotation:x", ik_deck_place.shoulder_pitch, 0.28)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_deck_place.elbow_pitch, 0.28)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_deck_place.wrist_pitch, 0.28)
+
+	# 7. Open fingers & release payload onto conveyor table
+	if finger_left: tween.tween_property(finger_left, "position:x", -0.34, 0.18)
+	if finger_right: tween.parallel().tween_property(finger_right, "position:x", 0.34, 0.18)
+
+	tween.tween_callback(func():
+		if is_instance_valid(held_box):
+			var final_world_tform: Transform3D = held_box.global_transform
+			held_box.get_parent().remove_child(held_box)
+			_get_world_root().add_child(held_box)
+			held_box.global_transform = final_world_tform
+			held_box.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
+			held_box.freeze = false
+			held_box.sleeping = false
+			held_box.set_collision_mask_value(2, true)
+			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_SLEEPING, false)
+			held_box.linear_velocity = Vector3(0.0, -0.15, 0.0)
+			held_box.angular_velocity = Vector3.ZERO
+			remove_collision_exception_with(held_box)
+			held_box.remove_collision_exception_with(self)
+			held_box = null
+			SoundManager.play_spatial(self, SoundManager.sfx_box_stow, +1.0)
+	)
+
+	# 8. Lift vertically back up above placed box
+	tween.tween_interval(0.06)
+	tween.tween_property(shoulder, "rotation:x", ik_deck_staging.shoulder_pitch, 0.25)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_deck_staging.elbow_pitch, 0.25)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_deck_staging.wrist_pitch, 0.25)
+
+	# 9. Fold arm home to compact rest pose
+	tween.tween_property(arm, "rotation:y", REST_ARM_YAW, 0.35)
+	tween.parallel().tween_property(shoulder, "rotation:x", REST_SHOULDER_PITCH, 0.35)
+	tween.parallel().tween_property(elbow, "rotation:x", REST_ELBOW_PITCH, 0.35)
+	tween.parallel().tween_property(wrist, "rotation:x", REST_WRIST_PITCH, 0.35)
+	if finger_left: tween.parallel().tween_property(finger_left, "position:x", -REST_FINGER_SPAN, 0.30)
+	if finger_right: tween.parallel().tween_property(finger_right, "position:x", REST_FINGER_SPAN, 0.30)
+
+	tween.finished.connect(func():
+		_is_arm_tweening = false
+		arm_motion_state = ArmMotionState.STATIONARY
+		set_amr_state(AmrState.IDLE)
+		_arm_status_text = "📦 Box Placed on Conveyor! Mission Complete"
+		_update_dev_status_label()
+	)
+	return true
 
 func _fold_arm_to_home_instant() -> void:
 	if arm: arm.rotation.y = REST_ARM_YAW
@@ -741,6 +889,10 @@ func _check_and_resolve_arm_collisions(_delta: float) -> void:
 			self_rids.append(part["body"].get_rid())
 	if held_box and is_instance_valid(held_box):
 		self_rids.append(held_box.get_rid())
+	if cargo_tray:
+		for child in cargo_tray.get_children():
+			if child is CollisionObject3D:
+				self_rids.append(child.get_rid())
 
 	var forward_dir: Vector3 = -global_transform.basis.z
 
@@ -1073,6 +1225,18 @@ func reset_robot(spawn_pos: Vector3, spawn_rot_y: float = 0.0) -> void:
 	is_rl_control = true
 	last_arm_hit = ""
 
+	# Kill any running arm tween
+	if _current_arm_tween and _current_arm_tween.is_valid():
+		_current_arm_tween.kill()
+		_current_arm_tween = null
+
+	# Clear collision exceptions with all tote boxes
+	var all_boxes = get_tree().get_nodes_in_group("tote_boxes")
+	for b in all_boxes:
+		if b is CollisionObject3D:
+			remove_collision_exception_with(b)
+			b.remove_collision_exception_with(self)
+
 	# Release any gripped box
 	if held_box and is_instance_valid(held_box):
 		if held_box.get_parent() == gripped_socket:
@@ -1081,13 +1245,14 @@ func reset_robot(spawn_pos: Vector3, spawn_rot_y: float = 0.0) -> void:
 		held_box.freeze = false
 	held_box = null
 
-	# Unparent any stowed boxes back to world root
-	for slot_idx in [0, 1]:
-		var s_box = get_slot_box(slot_idx)
-		if s_box and is_instance_valid(s_box) and s_box.get_parent() == cargo_tray:
-			cargo_tray.remove_child(s_box)
-			_get_world_root().add_child(s_box)
-			s_box.freeze = false
+	# Unparent all stowed boxes in cargo tray back to world root
+	if cargo_tray:
+		for child in cargo_tray.get_children():
+			if child is Node3D:
+				cargo_tray.remove_child(child)
+				_get_world_root().add_child(child)
+				if child is RigidBody3D:
+					child.freeze = false
 
 	active_target_box = null
 
