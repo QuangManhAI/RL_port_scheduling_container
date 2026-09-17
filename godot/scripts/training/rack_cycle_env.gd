@@ -70,6 +70,7 @@ var last_ik_dist: float = 0.0
 var last_ik_err: String = ""
 var trigger_attempted: bool = false
 var failed_attempt: bool = false
+var _pick_reward_given: int = 0
 var _stow_reward_given: int = 0
 var _place_reward_given: int = 0
 var _completion_reward_given: bool = false
@@ -138,6 +139,7 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 	box_dropped = false
 	trigger_attempted = false
 	failed_attempt = false
+	_pick_reward_given = 0
 	_stow_reward_given = 0
 	_place_reward_given = 0
 	_completion_reward_given = false
@@ -221,7 +223,7 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 		order.shuffle()
 		delivery_manifest = [order[0], order[1]]
 	elif is_full_tray_mode:
-		delivery_manifest = [0, 1]
+		delivery_manifest = []
 	else:
 		# Single box delivery default
 		delivery_manifest = [target_box_idx]
@@ -415,11 +417,12 @@ func _apply_action(action: Array) -> void:
 		if target_box and is_instance_valid(target_box):
 			var local_target = amr.arm.to_local(target_box.global_position)
 			var ik: ArmIKSolver.IKResult = ArmIKSolver.solve_local(local_target)
-			var in_reach = ik.success and amr.current_speed <= 0.45 and face_align >= 0.45 and not rack_toppled
+			var in_reach = ik.success and face_align >= 0.35 and not rack_toppled
 
 			if in_reach and trigger > 0.0:
 				trigger_attempted = true
 				current_sub_stage = CycleSubStage.DOCK_AND_PICK
+				amr.set_rl_control(0.0, 0.0) # Halt chassis immediately on pick trigger
 				amr.trigger_rl_action(target_box)
 			elif trigger > 0.35 and not in_reach and cur_dist > 2.2:
 				failed_attempt = true
@@ -451,25 +454,45 @@ func _physics_process(delta: float) -> void:
 				current_sub_stage = CycleSubStage.TRAY_STOW
 				amr.execute_dynamic_stow()
 
-		# Auto-chain: Stowed in tray & arm back to home -> Navigate Carrying
+		# Auto-chain: Stowed in tray -> Pick 2nd box if tray has slot OR Navigate Carrying
 		if current_sub_stage == CycleSubStage.TRAY_STOW:
 			if amr.get_stowed_box_count() > 0 and not amr._is_arm_tweening:
-				is_stowed = true
-				current_sub_stage = CycleSubStage.NAVIGATE_CARRYING
-				prev_sub_goal_dist = _get_dist_to_active_subgoal()
+				# Pop the box that was just stowed from the manifest
+				if not delivery_manifest.is_empty():
+					delivery_manifest.pop_front()
+
+				if amr.get_stowed_box_count() < 2 and not delivery_manifest.is_empty():
+					# Tray still has an empty slot (Slot 2) and manifest has more boxes!
+					# Pick the next box from the rack into the tray before driving to conveyor!
+					target_box_idx = delivery_manifest[0]
+					_update_active_target_box()
+					is_picked = false
+					is_stowed = false
+					current_sub_stage = CycleSubStage.NAVIGATE_TO_RACK
+					prev_sub_goal_dist = _get_dist_to_active_subgoal()
+				else:
+					# Tray is FULL (2/2) or manifest has no more boxes:
+					# Now drive across the bay to conveyor table with full batch!
+					is_stowed = true
+					current_sub_stage = CycleSubStage.NAVIGATE_CARRYING
+					prev_sub_goal_dist = _get_dist_to_active_subgoal()
 
 		# Auto-chain: Unstow & placed on conveyor -> Unstow next box or Return to Rack or Cycle Complete
 		if current_sub_stage == CycleSubStage.UNSTOW_AND_PLACE:
 			if not amr._is_arm_tweening and amr.held_box == null:
 				total_placed_boxes += 1
-				if not delivery_manifest.is_empty():
-					delivery_manifest.pop_front()
 
 				if amr.get_stowed_box_count() > 0:
+					# Unstow the second box from the tray onto the next conveyor slot!
 					var next_pos = _get_conveyor_drop_pos()
 					amr.execute_dynamic_unstow_and_place(next_pos)
-				elif not delivery_manifest.is_empty():
-					# Extended box transport: return to rack to pick the next box!
+				elif is_full_tray_mode or delivery_manifest.is_empty():
+					# All boxes delivered!
+					is_placed = true
+					cycle_success = true
+					current_sub_stage = CycleSubStage.CYCLE_COMPLETE
+				else:
+					# Tray is empty, but manifest still has more boxes! Return to rack!
 					target_box_idx = delivery_manifest[0]
 					_update_active_target_box()
 					is_picked = false
@@ -477,10 +500,6 @@ func _physics_process(delta: float) -> void:
 					is_placed = false
 					current_sub_stage = CycleSubStage.NAVIGATE_TO_RACK
 					prev_sub_goal_dist = _get_dist_to_active_subgoal()
-				else:
-					is_placed = true
-					cycle_success = true
-					current_sub_stage = CycleSubStage.CYCLE_COMPLETE
 
 	# Auto-cycle to next target after completing cycle (for interactive viewing)
 	if cycle_success:
@@ -545,7 +564,7 @@ func _compute_reward(action: Array) -> float:
 	var trigger = float(action[2]) if action.size() > 2 else 0.0
 
 	match current_sub_stage:
-		CycleSubStage.NAVIGATE_TO_RACK, CycleSubStage.DOCK_AND_PICK:
+		CycleSubStage.NAVIGATE_TO_RACK:
 			var target_box: ToteBox = boxes[target_box_idx] if target_box_idx < boxes.size() else null
 			if target_box and is_instance_valid(target_box) and not is_stowed:
 				var local_target = amr.arm.to_local(target_box.global_position)
@@ -556,9 +575,14 @@ func _compute_reward(action: Array) -> float:
 				if cur_dist <= 2.6:
 					if ik_res.target_distance > ArmIKSolver.MAX_REACH:
 						reward -= 0.50 * (ik_res.target_distance - ArmIKSolver.MAX_REACH)
-					elif ik_res.success:
-						reward += 0.40
-						reward += (trigger + 1.0) * 0.60
+					elif ik_res.success and face_align >= 0.35:
+						reward += 0.05
+
+		CycleSubStage.DOCK_AND_PICK:
+			var current_stowed = (amr.get_stowed_box_count() if amr else 0) + total_placed_boxes
+			if is_picked and _pick_reward_given <= current_stowed:
+				reward += 10.0
+				_pick_reward_given = current_stowed + 1
 
 		CycleSubStage.TRAY_STOW:
 			var total_stowed_now = (amr.get_stowed_box_count() if amr else 0) + total_placed_boxes
