@@ -50,7 +50,15 @@ const COLOR_CHARGING: Color = Color(0.1, 0.9, 0.4)     # Emerald (Charging)
 @onready var finger_right: Node3D = $RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/FingerRight
 @onready var gripped_socket: Node3D = $RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/GrippedBoxSocket
 
+@onready var arm_base_body: AnimatableBody3D = $RoboticArm/ArmBaseBody
+@onready var boom_body: AnimatableBody3D = $RoboticArm/ShoulderJoint/BoomBody
+@onready var forearm_body: AnimatableBody3D = $RoboticArm/ShoulderJoint/ElbowJoint/ForearmBody
+@onready var gripper_body: AnimatableBody3D = $RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/GripperBody
+@onready var finger_left_body: AnimatableBody3D = $RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/FingerLeft/FingerLeftBody
+@onready var finger_right_body: AnimatableBody3D = $RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/FingerRight/FingerRightBody
+
 @onready var cargo_tray: Node3D = $Chassis/CargoTray
+@onready var tray_body: AnimatableBody3D = $Chassis/CargoTray/TrayBody
 @onready var slot_1_marker: Marker3D = $Chassis/CargoTray/Slot1Marker
 @onready var slot_2_marker: Marker3D = $Chassis/CargoTray/Slot2Marker
 @onready var slot_1_sensor: Area3D = $Chassis/CargoTray/Slot1Sensor
@@ -64,10 +72,10 @@ const COLOR_CHARGING: Color = Color(0.1, 0.9, 0.4)     # Emerald (Charging)
 
 # Compact Folded Rest Pose Constants
 const REST_ARM_YAW: float = 0.0
-const REST_SHOULDER_PITCH: float = -1.18682  # deg_to_rad(-68.0): folded forward-down along chassis
-const REST_ELBOW_PITCH: float = 2.44346      # deg_to_rad(140.0): folded tightly back above boom
-const REST_WRIST_PITCH: float = -1.25664     # deg_to_rad(-72.0): gripper level and tucked
-const REST_FINGER_SPAN: float = 0.16         # Neatly closed parking width
+const REST_SHOULDER_PITCH: float = 0.0  # Upright mast safely behind front bumper (z = -0.42m)
+const REST_ELBOW_PITCH: float = 0.0     # Aligned mast
+const REST_WRIST_PITCH: float = 0.0     # Level gripper
+const REST_FINGER_SPAN: float = 0.16    # Neatly closed parking width
 
 var current_state: AmrState = AmrState.IDLE
 var arm_motion_state: ArmMotionState = ArmMotionState.STATIONARY
@@ -90,6 +98,8 @@ var is_rl_control: bool = false
 var _rl_target_v_lin: float = 0.0
 var _rl_target_v_ang: float = 0.0
 var _manual_angular_vel: float = 0.0
+var last_arm_hit: String = ""
+var arm_tween_speed_scale: float = 1.0
 
 func _ready() -> void:
 	_led_material = StandardMaterial3D.new()
@@ -331,9 +341,10 @@ func execute_dynamic_pick(target_box: ToteBox) -> void:
 		else:
 			dir_to_amr = -global_transform.basis.z
 		# Pull back 0.48m so 26cm fingers are completely outside the front face of the 38cm box with 5cm margin
+		# Plus +0.07m vertical clearance to guarantee the box base never drags across shelf plates during extraction
 		var local_dist: float = arm.to_local(box_pos).length()
 		var pullback: float = clampf(local_dist - 0.45, 0.42, 0.52)
-		staging_pos = box_pos + dir_to_amr * pullback
+		staging_pos = box_pos + dir_to_amr * pullback + Vector3(0.0, 0.07, 0.0)
 	else:
 		staging_pos = box_pos + Vector3(0.0, 0.35, 0.0)
 
@@ -359,6 +370,8 @@ func execute_dynamic_pick(target_box: ToteBox) -> void:
 	_update_dev_status_label()
 
 	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	if arm_tween_speed_scale != 1.0:
+		tween.set_speed_scale(arm_tween_speed_scale)
 
 	# --- STAGE 1: Pre-Grasp Staging & Gripper Opening in Aisle ---
 	# Open fingers wide to 68cm span WHILE OUTSIDE IN AISLE before any insertion into the bay
@@ -402,12 +415,26 @@ func execute_dynamic_pick(target_box: ToteBox) -> void:
 			gripped_socket.add_child(held_box)
 			held_box.transform = Transform3D.IDENTITY
 
+			# Temporarily isolate collision with shelf during extraction so held box never levers against rack
+			held_box.set_collision_mask_value(2, false)
+
 			SoundManager.play_spatial(self, SoundManager.sfx_box_pick, +2.0)
 	)
 
+	# --- STAGE 3.5: Vertical Pre-Lift inside bay (+6cm) ---
+	# Unseats box cleanly from shelf plate before horizontal retraction begins
+	if is_on_shelf:
+		var lift_target = box_pos + Vector3(0.0, 0.06, 0.0)
+		var ik_lift = ArmIKSolver.solve_local(arm.to_local(lift_target))
+		if ik_lift.success:
+			tween.tween_interval(0.05)
+			tween.tween_property(shoulder, "rotation:x", ik_lift.shoulder_pitch, 0.18)
+			tween.parallel().tween_property(elbow, "rotation:x", ik_lift.elbow_pitch, 0.18)
+			tween.parallel().tween_property(wrist, "rotation:x", ik_lift.wrist_pitch, 0.18)
+
 	# --- STAGE 4: Linear Retraction with Box back into Aisle ---
-	# Pull box straight back along horizontal staging axis into open aisle before folding
-	tween.tween_interval(0.08)
+	# Pull box straight back along horizontal elevated staging axis into open aisle before folding
+	tween.tween_interval(0.06)
 	tween.tween_callback(func():
 		arm_motion_state = ArmMotionState.RETRACTING
 		_arm_status_text = "Stage 4: Retracting into aisle..."
@@ -457,6 +484,8 @@ func execute_dynamic_stow() -> void:
 	_update_dev_status_label()
 
 	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	if arm_tween_speed_scale != 1.0:
+		tween.set_speed_scale(arm_tween_speed_scale)
 
 	# 1. Swivel 180 degrees backwards over active slot at high altitude (above tray rails)
 	tween.tween_property(arm, "rotation:y", ik_staging.base_yaw, 0.45)
@@ -483,6 +512,7 @@ func execute_dynamic_stow() -> void:
 			held_box.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 			held_box.freeze = true
 			held_box.sleeping = false
+			held_box.set_collision_mask_value(2, true)
 			held_box = null
 
 			SoundManager.play_spatial(self, SoundManager.sfx_box_stow, +1.0)
@@ -603,6 +633,7 @@ func _physics_process(delta: float) -> void:
 			velocity.y -= 9.81 * delta
 			move_and_slide()
 
+	_check_and_resolve_arm_collisions(delta)
 	_update_inactive_arm_animation(delta)
 	_update_stowed_cargo_dynamics(delta)
 
@@ -669,6 +700,104 @@ func _process_rl_driving(delta: float) -> void:
 	else:
 		velocity.y = 0.0
 	move_and_slide()
+
+	# Dynamic impact physics with RigidBody3D obstacles in RL mode
+	for i in range(get_slide_collision_count()):
+		var col: KinematicCollision3D = get_slide_collision(i)
+		var collider = col.get_collider()
+		if collider is RigidBody3D:
+			var impact_speed: float = abs(_manual_linear_vel)
+			var impulse_dir: Vector3 = -col.get_normal()
+			var contact_offset: Vector3 = col.get_position() - collider.global_position
+
+			if collider is ToteBox:
+				var impulse_mag: float = impact_speed * 140.0 + 40.0
+				collider.apply_impulse(impulse_dir * impulse_mag * delta, contact_offset)
+			elif collider is ShelfPod:
+				var impulse_mag: float = impact_speed * 2000.0 + 400.0
+				collider.apply_impulse(impulse_dir * impulse_mag * delta, contact_offset)
+
+## Active Continuous Collision Detection & Contact Resolution for Robotic Arm
+func _check_and_resolve_arm_collisions(_delta: float) -> void:
+	if not is_inside_tree():
+		return
+	var space_state: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
+	if not space_state:
+		return
+
+	var arm_parts: Array[Dictionary] = [
+		{"node": shoulder, "body": boom_body, "size": Vector3(0.14, 1.02, 0.16), "offset": Vector3(0, 0.51, 0)},
+		{"node": elbow, "body": forearm_body, "size": Vector3(0.12, 0.86, 0.14), "offset": Vector3(0, 0.43, 0)},
+		{"node": wrist, "body": gripper_body, "size": Vector3(0.28, 0.08, 0.14), "offset": Vector3(0, 0.04, 0)},
+		{"node": finger_left, "body": finger_left_body, "size": Vector3(0.04, 0.26, 0.14), "offset": Vector3(0, 0.13, 0)},
+		{"node": finger_right, "body": finger_right_body, "size": Vector3(0.04, 0.26, 0.14), "offset": Vector3(0, 0.13, 0)}
+	]
+
+	var self_rids: Array[RID] = [get_rid()]
+	if tray_body: self_rids.append(tray_body.get_rid())
+	if arm_base_body: self_rids.append(arm_base_body.get_rid())
+	for part in arm_parts:
+		if part["body"]:
+			self_rids.append(part["body"].get_rid())
+	if held_box and is_instance_valid(held_box):
+		self_rids.append(held_box.get_rid())
+
+	var forward_dir: Vector3 = -global_transform.basis.z
+
+	for part in arm_parts:
+		var joint_node: Node3D = part["node"]
+		var body_node: AnimatableBody3D = part["body"]
+		if not joint_node:
+			continue
+
+		var query_tf = joint_node.global_transform.translated_local(part["offset"])
+		if body_node:
+			body_node.global_transform = joint_node.global_transform
+
+		var shape = BoxShape3D.new()
+		shape.size = part["size"]
+
+		var query = PhysicsShapeQueryParameters3D.new()
+		query.shape_rid = shape.get_rid()
+		# Collides with: ShelfPod (2), ToteBoxes (8), CargoTray (32)
+		query.collision_mask = 2 | 8 | 32
+		query.exclude = self_rids
+		query.transform = query_tf
+
+		var hits = space_state.intersect_shape(query, 6)
+		for hit in hits:
+			var collider = hit.collider
+			if not is_instance_valid(collider) or collider == self or collider in self_rids:
+				continue
+			if collider.name == "ArenaFloor":
+				continue
+
+			var shape_idx = hit.get("shape", -1)
+			last_arm_hit = "%s (shape %d) on %s at %s" % [collider.name, shape_idx, body_node.name if body_node else "arm", str(query_tf.origin)]
+
+			# 1. Physics impulse transfer if hitting dynamic RigidBody3D (ToteBox or ShelfPod)
+			if collider is RigidBody3D:
+				var impact_speed: float = maxf(abs(_manual_linear_vel), 0.75)
+				var contact_dir: Vector3 = (collider.global_position - query_tf.origin).normalized()
+				if contact_dir.length_squared() < 0.01:
+					contact_dir = forward_dir
+
+				if collider is ToteBox and collider != held_box:
+					var push_impulse: Vector3 = contact_dir * (collider.mass * (impact_speed * 1.5 + 0.4))
+					collider.apply_central_impulse(push_impulse)
+					collider.sleeping = false
+				elif collider is ShelfPod:
+					var push_impulse: Vector3 = contact_dir * (collider.mass * 0.06 * impact_speed)
+					collider.apply_central_impulse(push_impulse)
+					collider.sleeping = false
+
+			# 2. Block AMR forward driving if arm is contacting obstacle ahead
+			var arm_rel_fwd = forward_dir.dot(query_tf.origin - global_position)
+			if arm_rel_fwd > 0.1:
+				if _manual_linear_vel > 0.0:
+					_manual_linear_vel = 0.0
+					velocity.x = 0.0
+					velocity.z = 0.0
 
 ## Dynamic Idle Breathing and Suspension Compliance for Inactive Resting Arm
 func _update_inactive_arm_animation(delta: float) -> void:
@@ -823,7 +952,11 @@ func _process_manual_driving(delta: float) -> void:
 
 func _update_dev_status_label() -> void:
 	if label_status:
-		label_status.text = "%s [DEV BOT]\n⚡ %.0f%% | %.1f m/s\n%s\nTray: %d/2 box(es)" % [
+		if is_rl_control or not is_manual_control:
+			label_status.visible = false
+			return
+		label_status.visible = true
+		label_status.text = "%s [DEV BOT]\n⚡ %.0f%% | %.1f m/s\n%s\nTray: %d/2" % [
 			robot_id,
 			battery_level,
 			current_speed,
@@ -938,6 +1071,7 @@ func reset_robot(spawn_pos: Vector3, spawn_rot_y: float = 0.0) -> void:
 	_rl_target_v_ang = 0.0
 	is_manual_control = false
 	is_rl_control = true
+	last_arm_hit = ""
 
 	# Release any gripped box
 	if held_box and is_instance_valid(held_box):

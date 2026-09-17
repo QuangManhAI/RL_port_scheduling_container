@@ -21,6 +21,25 @@ func _ready() -> void:
 	var p = get_parent()
 	if p is TrainingEnvBase:
 		env_node = p
+		var s_name: String = p.name
+		if s_name == "TrainingRackPick":
+			title_label.text = "STAGE R3: RACK BOX PICK & STOW (RL TRAINING)"
+		elif s_name == "TrainingRackTargeting":
+			title_label.text = "STAGE R2: TIER TARGETING & DOCKING (RL TRAINING)"
+		elif s_name == "TrainingRackDocking":
+			title_label.text = "STAGE R1: RACK DOCKING (RL TRAINING)"
+		elif s_name == "TrainingNavigateToItem":
+			title_label.text = "STAGE S1: NAVIGATE TO ITEM (RL TRAINING)"
+		elif s_name == "TrainingPickup":
+			title_label.text = "STAGE S2: TOTE PICKUP (RL TRAINING)"
+		elif s_name == "TrainingDropoff":
+			title_label.text = "STAGE S3: TOTE DROPOFF (RL TRAINING)"
+		elif s_name == "TrainingNavigateCarrying":
+			title_label.text = "STAGE S4: NAVIGATE CARRYING (RL TRAINING)"
+		elif s_name == "TrainingChainedCycle":
+			title_label.text = "STAGE S5: CHAINED PICK-AND-PLACE (RL TRAINING)"
+		elif s_name == "TrainingMultiAgent":
+			title_label.text = "STAGE S6: MULTI-AGENT COORDINATION (RL TRAINING)"
 	banner_label.visible = false
 
 func _process(delta: float) -> void:

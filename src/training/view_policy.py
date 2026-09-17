@@ -32,6 +32,7 @@ from src.envs.navigate_to_item_env import NavigateToItemEnv
 from src.envs.pickup_env import PickupEnv
 from src.envs.rack_docking_gym_env import RackDockingGymEnv
 from src.envs.rack_targeting_gym_env import RackTargetingGymEnv
+from src.envs.rack_pick_gym_env import RackPickGymEnv
 from src.utils.config_loader import get_clock_config
 
 STAGE_MAP = {
@@ -49,6 +50,8 @@ STAGE_MAP = {
     "rack_docking": (RackDockingGymEnv, "src/training/logs/checkpoints/ppo_r1_final.zip"),
     "r2": (RackTargetingGymEnv, "src/training/logs/checkpoints/ppo_r2_final.zip"),
     "rack_targeting": (RackTargetingGymEnv, "src/training/logs/checkpoints/ppo_r2_final.zip"),
+    "r3": (RackPickGymEnv, "src/training/logs/checkpoints/ppo_r3_final.zip"),
+    "rack_pick": (RackPickGymEnv, "src/training/logs/checkpoints/ppo_r3_final.zip"),
 }
 
 
@@ -63,7 +66,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=11000, help="TCP port for Godot bridge")
     parser.add_argument("--physics-fps", type=int, default=def_physics_fps, help=f"Simulation physics clock rate in Hz (default from config.yaml: {def_physics_fps})")
     parser.add_argument("--action-fps", type=float, default=def_action_fps, help=f"Action decision clock rate in Hz (default from config.yaml: {def_action_fps})")
-    parser.add_argument("--native", action="store_true", help="Run 100% native in-engine AI (zero Python TCP overhead, dual-clock decoupled)")
+    parser.add_argument("--native", action="store_true", help="Run 100%% native in-engine AI (zero Python TCP overhead, dual-clock decoupled)")
     parser.add_argument("--connect", action="store_true", help="Connect to already-running Godot Editor instance (F6) instead of spawning a new window")
     parser.add_argument("--episodes", type=int, default=30, help="Number of episodes to run (0 for infinite)")
     parser.add_argument("--difficulty", type=float, default=0, help="Curriculum difficulty (0.0 to 1.0)")
@@ -81,7 +84,14 @@ def main() -> None:
         godot_bin = find_godot_binary()
         proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         godot_proj = os.path.join(proj_root, "godot")
-        scene = "res://scenes/training/training_rack_docking.tscn" if "r" in stage_key else "res://scenes/training/multi_agent_arena.tscn"
+        if stage_key in ("r3", "rack_pick"):
+            scene = "res://scenes/training/training_rack_pick.tscn"
+        elif stage_key in ("r2", "rack_targeting"):
+            scene = "res://scenes/training/training_rack_targeting.tscn"
+        elif "r" in stage_key:
+            scene = "res://scenes/training/training_rack_docking.tscn"
+        else:
+            scene = "res://scenes/training/multi_agent_arena.tscn"
         print("===========================================================")
         print("  MODE: Native Dual-Clock In-Engine AI")
         print(f"  Simulation Speed (Physics):  {args.physics_fps} Hz")
