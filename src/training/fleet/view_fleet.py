@@ -22,6 +22,7 @@ if project_root not in sys.path:
 
 from src.envs.fleet.fleet_mappo_gym_env import FleetMappoGymEnv
 from src.training.fleet.mappo_agent import MappoAgent
+from src.utils.config_loader import get_clock_config
 
 SUB_STAGE_NAMES = {
     0: "NAV_TO_RACK",
@@ -34,43 +35,73 @@ SUB_STAGE_NAMES = {
 
 
 def compute_fleet_navigation_action(obs_agent: np.ndarray, agent_idx: int) -> np.ndarray:
-    """Proactive goal-directed navigation with mutual yielding and obstacle avoidance."""
+    """Proactive goal-directed navigation with corridor steering, mutual yielding and collision avoidance."""
     local_dx = float(obs_agent[6]) * 20.0
     local_dz = float(obs_agent[7]) * 20.0
-    dist_to_goal = np.hypot(local_dx, local_dz)
+    # In Godot, forward is -Z, right is +X
+    fwd_dist = -local_dz
+    lat_dist = local_dx
+    dist_to_goal = np.hypot(lat_dist, fwd_dist)
 
-    # Calculate desired angular rate to face sub-goal
-    target_heading_err = np.arctan2(local_dx, -local_dz)
-    w_cmd = float(np.clip(target_heading_err * 2.2, -1.0, 1.0))
+    # Calculate desired angular rate to face sub-goal (negative sign for Godot right-hand rule)
+    target_heading_err = np.arctan2(lat_dist, fwd_dist)
+    w_cmd = float(np.clip(-target_heading_err * 2.2, -1.0, 1.0))
 
     # Calculate linear velocity (throttle down when turning sharply)
-    if abs(target_heading_err) < 0.45:
+    if abs(target_heading_err) < 0.35:
         v_cmd = 0.85 if dist_to_goal > 1.2 else 0.35
-    elif abs(target_heading_err) < 0.9:
-        v_cmd = 0.45
+    elif abs(target_heading_err) < 0.75:
+        v_cmd = 0.50
+    elif abs(target_heading_err) < 1.2:
+        v_cmd = 0.25
     else:
-        v_cmd = 0.15
+        v_cmd = 0.05
 
-    # Mutual yielding using k-NN
-    neighbor_dx = float(obs_agent[10]) * 6.0
-    neighbor_dz = float(obs_agent[11]) * 6.0
+    if dist_to_goal <= 1.8:
+        v_cmd = min(v_cmd, 0.30)
+
+    # Mutual yielding using k-NN (Neighbor 1 is index 11..15)
+    neighbor_dx = float(obs_agent[11]) * 6.0
+    neighbor_dz = float(obs_agent[12]) * 6.0
     neighbor_dist = np.hypot(neighbor_dx, neighbor_dz)
 
-    if 0.1 < neighbor_dist < 2.2:
+    if 0.1 < neighbor_dist < 2.0:
         # Agent with higher index yields in narrow aisle
         if agent_idx > 0:
             v_cmd = 0.10
-            w_cmd += 0.50
+            steer_away = -1.0 if neighbor_dx > 0 else 1.0
+            w_cmd = steer_away * 0.6
+        else:
+            v_cmd = min(v_cmd, 0.40)
 
-    return np.array([v_cmd, w_cmd], dtype=np.float32)
+    # LiDAR obstacle avoidance (indices 21..36)
+    if len(obs_agent) >= 37:
+        lidar = obs_agent[21:37]
+        min_fwd_dist = min(float(lidar[0]), float(lidar[1]), float(lidar[15])) * 6.0
+        if min_fwd_dist < 0.75 and dist_to_goal > 1.8:
+            v_cmd = min(v_cmd, 0.15)
+            left_clr = min(float(lidar[2]), float(lidar[3]), float(lidar[4]))
+            right_clr = min(float(lidar[12]), float(lidar[13]), float(lidar[14]))
+            if left_clr > right_clr:
+                w_cmd += 0.50
+            else:
+                w_cmd -= 0.50
+
+    return np.array([float(np.clip(v_cmd, -1.0, 1.0)), float(np.clip(w_cmd, -1.0, 1.0))], dtype=np.float32)
 
 
 def main() -> None:
+    clock_cfg = get_clock_config()
+    default_physics_fps = int(clock_cfg.get("physics_fps", 200))
+    default_action_fps = int(clock_cfg.get("action_fps", 60))
+
     parser = argparse.ArgumentParser(description="View Phase 08 Fleet MAPPO in Visual Window.")
     parser.add_argument("--checkpoint", type=str, default="src/training/logs/checkpoints/fleet/mappo_fleet_final.pt", help="Path to MAPPO checkpoint (.pt)")
     parser.add_argument("--port", type=int, default=11300, help="TCP port for Godot bridge (default: 11300)")
     parser.add_argument("--num-amrs", type=int, default=2, help="Number of AMRs to coordinate (default: 2)")
-    parser.add_argument("--fps", type=float, default=60.0, help="Visual playback pacing rate in Hz (default: 60)")
+    parser.add_argument("--physics-fps", type=int, default=default_physics_fps, help=f"Physics clock rate in Hz from config.yaml (default: {default_physics_fps})")
+    parser.add_argument("--action-fps", type=int, default=default_action_fps, help=f"Action decision clock rate in Hz from config.yaml (default: {default_action_fps})")
+    parser.add_argument("--fps", type=float, default=float(default_action_fps), help=f"Visual playback pacing rate in Hz (default: {default_action_fps})")
     parser.add_argument("--episodes", type=int, default=5, help="Number of episodes to demonstrate (default: 5)")
     parser.add_argument("--connect", action="store_true", help="Connect to running Godot Editor (F6) instead of spawning")
 
@@ -80,6 +111,7 @@ def main() -> None:
     print("   PHASE 08: MULTI-AGENT FLEET COORDINATION VIEWER (MAPPO)")
     print(f"   Fleet:          {args.num_amrs} Phase 07 AMRs (Dual Trays + IK Grippers)")
     print(f"   Environment:    Dual 4-Tier Racks (16 Boxes) + Motorized Conveyor Table")
+    print(f"   Dual Clock:     Physics: {args.physics_fps} Hz | Action: {args.action_fps} Hz (ticks={args.physics_fps/args.action_fps:.2f})")
     print(f"   Visual Pacing:  {args.fps:.1f} FPS | Mode: {'Connect to Godot' if args.connect else 'Spawn New Window'}")
     print(f"   TCP Port:       {args.port}")
     print("=" * 70 + "\n")
@@ -89,6 +121,8 @@ def main() -> None:
         num_agents=args.num_amrs,
         headless=False,
         autostart=not args.connect,
+        physics_hz=args.physics_fps,
+        action_hz=args.action_fps,
         fps=args.fps,
     )
 

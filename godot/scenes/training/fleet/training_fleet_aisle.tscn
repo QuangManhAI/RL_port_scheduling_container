@@ -165,13 +165,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 2.23, 3.4)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 2.23, 3.4)
 
 [node name="ConveyorTable" parent="." instance=ExtResource("7_table")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.5, 0, 0)
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 5.2, 0, 0)
 
 [node name="AMR_1" parent="." instance=ExtResource("2_amr")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.0, 0.02, -0.8)
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -5.0, 0.02, -0.6)
 
 [node name="AMR_2" parent="." instance=ExtResource("2_amr")]
-transform = Transform3D(-1, 0, 8.74228e-08, 0, 1, 0, -8.74228e-08, 0, -1, -4.0, 0.02, 0.8)
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -6.5, 0.02, 0.6)
 
 [node name="TrainingCamera" type="Camera3D" parent="." node_paths=PackedStringArray("target_node")]
 transform = Transform3D(1, 0, 0, 0, 0.5, 0.866025, 0, -0.866025, 0.5, 0, 18, 12)
