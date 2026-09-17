@@ -101,6 +101,7 @@ class GodotTCPClient:
         difficulty: float = 0.0,
         full_tray: bool = False,
         multi_box: bool = False,
+        **kwargs: Any,
     ) -> Tuple[List[float], Dict[str, Any]]:
         """Send reset command and receive initial observation."""
         msg: Dict[str, Any] = {"command": "reset", "seed": seed, "difficulty": difficulty}
@@ -108,6 +109,8 @@ class GodotTCPClient:
             msg["full_tray"] = True
         if multi_box:
             msg["multi_box"] = True
+        for k, v in kwargs.items():
+            msg[k] = v
         self.send_message(msg)
         res = self.receive_message()
         obs = res.get("observation", [])
@@ -224,10 +227,11 @@ class GodotEnvBridge:
         difficulty: float = 0.0,
         full_tray: bool = False,
         multi_box: bool = False,
+        **kwargs: Any,
     ) -> Tuple[List[float], Dict[str, Any]]:
         if not self.client:
             raise RuntimeError("Bridge not started.")
-        return self.client.reset(seed, difficulty, full_tray=full_tray, multi_box=multi_box)
+        return self.client.reset(seed, difficulty, full_tray=full_tray, multi_box=multi_box, **kwargs)
 
     def step(self, action: List[float]) -> Tuple[List[float], float, bool, bool, Dict[str, Any]]:
         if not self.client:

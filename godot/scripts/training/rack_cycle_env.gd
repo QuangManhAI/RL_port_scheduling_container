@@ -23,6 +23,13 @@ const TOTE_SLOT_DEFS: Array[Dictionary] = [
 	{"tier": 4, "side": "R", "side_val": 1.0, "offset": Vector3(0.36, 2.23, -0.60)},
 ]
 
+const CONVEYOR_SLOTS: Array[Vector3] = [
+	Vector3(-0.45, 0.77, -0.05),
+	Vector3(-0.15, 0.77, -0.05),
+	Vector3(0.15, 0.77, -0.05),
+	Vector3(0.45, 0.77, -0.05),
+]
+
 enum CycleSubStage {
 	NAVIGATE_TO_RACK = 1,
 	DOCK_AND_PICK = 2,
@@ -38,6 +45,7 @@ const NeuralPolicyScript = preload("res://scripts/ai/neural_policy.gd")
 @export var policy_json_path: String = "res://models/ppo_r4_policy.json"
 
 var boxes: Array[ToteBox] = []
+var delivery_manifest: Array[int] = []
 var target_box_idx: int = 0
 var target_tier: int = 1
 var target_side_val: float = -1.0
@@ -62,6 +70,9 @@ var last_ik_dist: float = 0.0
 var last_ik_err: String = ""
 var trigger_attempted: bool = false
 var failed_attempt: bool = false
+var _stow_reward_given: int = 0
+var _place_reward_given: int = 0
+var _completion_reward_given: bool = false
 
 var native_policy: RefCounted = null
 var _native_reset_timer: float = 0.0
@@ -127,6 +138,9 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 	box_dropped = false
 	trigger_attempted = false
 	failed_attempt = false
+	_stow_reward_given = 0
+	_place_reward_given = 0
+	_completion_reward_given = false
 	_sub_stage_steps = 0
 	_stow_reset_timer = 0.0
 	current_sub_stage = CycleSubStage.NAVIGATE_TO_RACK
@@ -134,7 +148,7 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 	initial_stowed_count = 0
 	is_full_tray_mode = false
 
-	if last_reset_msg.get("full_tray", false) or last_reset_msg.get("multi_box", false) or difficulty >= 2.0:
+	if last_reset_msg.get("full_tray", false) or difficulty >= 2.0:
 		is_full_tray_mode = true
 
 	# 1. Reset Rack position and physics state at z = -4.0m, facing aisle (rotation.y = PI)
@@ -191,14 +205,31 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 
 	# 5. Uniformly select target SKU box (Tier 1-4, L/R)
 	target_box_idx = rng.randi_range(0, min(boxes.size(), TOTE_SLOT_DEFS.size()) - 1)
-	var active_slot = TOTE_SLOT_DEFS[target_box_idx]
-	target_tier = active_slot["tier"]
-	target_side_val = active_slot["side_val"]
+	delivery_manifest.clear()
 
-	if target_box_idx < boxes.size():
-		var target_box = boxes[target_box_idx]
-		if target_box and target_box.mesh_inst:
-			target_box.mesh_inst.material_override = _mat_highlight
+	if last_reset_msg.has("manifest") and last_reset_msg["manifest"] is Array:
+		for val in last_reset_msg["manifest"]:
+			delivery_manifest.append(int(val))
+	elif last_reset_msg.has("delivery_count"):
+		var req_count: int = int(last_reset_msg["delivery_count"])
+		var order: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7]
+		order.shuffle()
+		for i in range(min(req_count, order.size())):
+			delivery_manifest.append(order[i])
+	elif last_reset_msg.get("multi_box", false) and not is_full_tray_mode:
+		var order: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7]
+		order.shuffle()
+		delivery_manifest = [order[0], order[1]]
+	elif is_full_tray_mode:
+		delivery_manifest = [0, 1]
+	else:
+		# Single box delivery default
+		delivery_manifest = [target_box_idx]
+
+	if not delivery_manifest.is_empty():
+		target_box_idx = delivery_manifest[0]
+
+	_update_active_target_box()
 
 	if is_full_tray_mode and amr and amr.cargo_tray and boxes.size() >= 2:
 		var b0 = boxes[0]
@@ -231,13 +262,34 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 	else:
 		initial_stowed_count = 1
 
+	max_episode_steps = max(750, delivery_manifest.size() * 1000)
 	prev_sub_goal_dist = _get_dist_to_active_subgoal()
+
+func _update_active_target_box() -> void:
+	if target_box_idx >= 0 and target_box_idx < min(boxes.size(), TOTE_SLOT_DEFS.size()):
+		var active_slot = TOTE_SLOT_DEFS[target_box_idx]
+		target_tier = active_slot["tier"]
+		target_side_val = active_slot["side_val"]
+		for i in range(boxes.size()):
+			if boxes[i] and is_instance_valid(boxes[i]) and boxes[i].mesh_inst:
+				if i == target_box_idx:
+					boxes[i].mesh_inst.material_override = _mat_highlight
+				else:
+					boxes[i].mesh_inst.material_override = _mat_normal
 
 func _get_target_box_pos() -> Vector3:
 	if target_box_idx < boxes.size() and boxes[target_box_idx]:
 		return boxes[target_box_idx].global_position
 	var s_def = TOTE_SLOT_DEFS[target_box_idx]
 	return rack.to_global(s_def["offset"]) if rack else (Vector3(0.0, 0.0, -4.0) + s_def["offset"])
+
+func _get_conveyor_drop_pos() -> Vector3:
+	var slot_idx: int = clampi(total_placed_boxes, 0, CONVEYOR_SLOTS.size() - 1)
+	if conveyor:
+		return conveyor.to_global(CONVEYOR_SLOTS[slot_idx])
+	elif drop_target_marker:
+		return drop_target_marker.global_position + Vector3(CONVEYOR_SLOTS[slot_idx].x, 0.0, 0.0)
+	return Vector3(CONVEYOR_SLOTS[slot_idx].x, 0.77, 3.95)
 
 func _get_active_subgoal_pos() -> Vector3:
 	if current_sub_stage in [CycleSubStage.NAVIGATE_TO_RACK, CycleSubStage.DOCK_AND_PICK, CycleSubStage.TRAY_STOW]:
@@ -374,9 +426,7 @@ func _apply_action(action: Array) -> void:
 
 	elif current_sub_stage in [CycleSubStage.NAVIGATE_CARRYING, CycleSubStage.CONVEYOR_DOCK] and is_stowed and not is_placed:
 		# Conveyor table dropoff trigger (slot-aware for multi-box)
-		var drop_pos = drop_target_marker.global_position if drop_target_marker else Vector3(0.0, 0.77, 3.95)
-		if amr.get_stowed_box_count() > 1:
-			drop_pos = conveyor.to_global(Vector3(-0.35, 0.77, -0.05)) if conveyor else (drop_pos + Vector3(-0.35, 0.0, 0.0))
+		var drop_pos = _get_conveyor_drop_pos()
 		var ik_deck = ArmIKSolver.solve_local(amr.arm.to_local(drop_pos))
 		last_ik_dist = ik_deck.target_distance
 		last_ik_err = ik_deck.error_message
@@ -408,15 +458,26 @@ func _physics_process(delta: float) -> void:
 				current_sub_stage = CycleSubStage.NAVIGATE_CARRYING
 				prev_sub_goal_dist = _get_dist_to_active_subgoal()
 
-		# Auto-chain: Unstow & placed on conveyor -> Unstow next box or Cycle Complete
+		# Auto-chain: Unstow & placed on conveyor -> Unstow next box or Return to Rack or Cycle Complete
 		if current_sub_stage == CycleSubStage.UNSTOW_AND_PLACE:
 			if not amr._is_arm_tweening and amr.held_box == null:
+				total_placed_boxes += 1
+				if not delivery_manifest.is_empty():
+					delivery_manifest.pop_front()
+
 				if amr.get_stowed_box_count() > 0:
-					total_placed_boxes += 1
-					var next_pos = conveyor.to_global(Vector3(0.35, 0.77, -0.05)) if conveyor else (drop_target_marker.global_position + Vector3(0.35, 0.0, 0.0))
+					var next_pos = _get_conveyor_drop_pos()
 					amr.execute_dynamic_unstow_and_place(next_pos)
+				elif not delivery_manifest.is_empty():
+					# Extended box transport: return to rack to pick the next box!
+					target_box_idx = delivery_manifest[0]
+					_update_active_target_box()
+					is_picked = false
+					is_stowed = false
+					is_placed = false
+					current_sub_stage = CycleSubStage.NAVIGATE_TO_RACK
+					prev_sub_goal_dist = _get_dist_to_active_subgoal()
 				else:
-					total_placed_boxes += 1
 					is_placed = true
 					cycle_success = true
 					current_sub_stage = CycleSubStage.CYCLE_COMPLETE
@@ -500,8 +561,10 @@ func _compute_reward(action: Array) -> float:
 						reward += (trigger + 1.0) * 0.60
 
 		CycleSubStage.TRAY_STOW:
-			if is_stowed:
+			var total_stowed_now = (amr.get_stowed_box_count() if amr else 0) + total_placed_boxes
+			if total_stowed_now > _stow_reward_given:
 				reward += 5.0
+				_stow_reward_given = total_stowed_now
 
 		CycleSubStage.NAVIGATE_CARRYING, CycleSubStage.CONVEYOR_DOCK:
 			# Guidance to conveyor table
@@ -511,8 +574,12 @@ func _compute_reward(action: Array) -> float:
 					reward += 0.50
 
 		CycleSubStage.UNSTOW_AND_PLACE, CycleSubStage.CYCLE_COMPLETE:
-			if cycle_success:
+			if total_placed_boxes > _place_reward_given:
+				reward += 15.0
+				_place_reward_given = total_placed_boxes
+			if cycle_success and not _completion_reward_given:
 				reward += 30.0 + maxf(0.0, face_align) * 5.0
+				_completion_reward_given = true
 
 	# 5. Check for dropped / fallen boxes
 	for b in boxes:
@@ -575,7 +642,10 @@ func _get_info() -> Dictionary:
 		"total_placed_boxes": total_placed_boxes,
 		"initial_stowed_count": initial_stowed_count,
 		"is_full_tray_mode": is_full_tray_mode,
+		"delivery_manifest_remaining": delivery_manifest.size(),
+		"delivery_manifest": delivery_manifest.duplicate(),
+		"is_manifest_empty": delivery_manifest.is_empty(),
 		"cargo_tray_attached": (amr.cargo_tray != null and amr.cargo_tray.get_parent() != null and amr.cargo_tray.get_parent().name == "Chassis"),
-		"all_boxes_transported": (is_placed and (amr.get_stowed_box_count() if amr else 0) == 0),
+		"all_boxes_transported": (is_placed and (amr.get_stowed_box_count() if amr else 0) == 0 and delivery_manifest.is_empty()),
 		"box_dropped": box_dropped,
 	}
