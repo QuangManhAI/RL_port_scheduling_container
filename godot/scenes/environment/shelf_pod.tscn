@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3 uid="uid://dmx3shelf003"]
+[gd_scene load_steps=10 format=3 uid="uid://dmx3shelf003"]
 
 [ext_resource type="Script" path="res://scripts/environment/shelf_pod.gd" id="1_script"]
 
@@ -20,6 +20,18 @@ size = Vector3(0.1, 2.8, 0.1)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_shelf_plate"]
 size = Vector3(1.6, 0.05, 1.6)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_slot_panel"]
+albedo_color = Color(0.18, 0.22, 0.28, 1)
+roughness = 0.4
+metallic = 0.7
+
+[sub_resource type="BoxMesh" id="BoxMesh_slot_panel"]
+material = SubResource("StandardMaterial3D_slot_panel")
+size = Vector3(0.66, 0.03, 0.46)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_slot_panel"]
+size = Vector3(0.66, 0.03, 0.46)
 
 [node name="ShelfPod" type="RigidBody3D"]
 collision_layer = 2
@@ -63,6 +75,38 @@ shape = SubResource("BoxShape3D_shelf_plate")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.02, 0)
 shape = SubResource("BoxShape3D_shelf_plate")
 
+[node name="ColPanel_T1_L" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 0.385, -0.6)
+shape = SubResource("BoxShape3D_slot_panel")
+
+[node name="ColPanel_T1_R" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 0.385, -0.6)
+shape = SubResource("BoxShape3D_slot_panel")
+
+[node name="ColPanel_T2_L" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 0.935, -0.6)
+shape = SubResource("BoxShape3D_slot_panel")
+
+[node name="ColPanel_T2_R" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 0.935, -0.6)
+shape = SubResource("BoxShape3D_slot_panel")
+
+[node name="ColPanel_T3_L" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 1.495, -0.6)
+shape = SubResource("BoxShape3D_slot_panel")
+
+[node name="ColPanel_T3_R" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 1.495, -0.6)
+shape = SubResource("BoxShape3D_slot_panel")
+
+[node name="ColPanel_T4_L" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 2.055, -0.6)
+shape = SubResource("BoxShape3D_slot_panel")
+
+[node name="ColPanel_T4_R" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 2.055, -0.6)
+shape = SubResource("BoxShape3D_slot_panel")
+
 [node name="LegFL" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 1.4, -0.75)
 mesh = SubResource("BoxMesh_leg")
@@ -94,6 +138,38 @@ mesh = SubResource("BoxMesh_shelf_divider")
 [node name="ShelfDivider3_4" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.02, 0)
 mesh = SubResource("BoxMesh_shelf_divider")
+
+[node name="Panel_T1_L" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 0.385, -0.6)
+mesh = SubResource("BoxMesh_slot_panel")
+
+[node name="Panel_T1_R" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 0.385, -0.6)
+mesh = SubResource("BoxMesh_slot_panel")
+
+[node name="Panel_T2_L" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 0.935, -0.6)
+mesh = SubResource("BoxMesh_slot_panel")
+
+[node name="Panel_T2_R" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 0.935, -0.6)
+mesh = SubResource("BoxMesh_slot_panel")
+
+[node name="Panel_T3_L" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 1.495, -0.6)
+mesh = SubResource("BoxMesh_slot_panel")
+
+[node name="Panel_T3_R" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 1.495, -0.6)
+mesh = SubResource("BoxMesh_slot_panel")
+
+[node name="Panel_T4_L" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 2.055, -0.6)
+mesh = SubResource("BoxMesh_slot_panel")
+
+[node name="Panel_T4_R" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 2.055, -0.6)
+mesh = SubResource("BoxMesh_slot_panel")
 
 [node name="PodLabel" type="Label3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)
