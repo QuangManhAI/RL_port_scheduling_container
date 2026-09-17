@@ -126,7 +126,13 @@ class FleetMappoGymEnv(gym.Env):
                 if k not in ["difficulty"]:
                     extra_kwargs[k] = v
 
-        raw_obs, info = self.bridge.client.reset(seed=seed_val, difficulty=difficulty, **extra_kwargs)
+        raw_obs, info = self.bridge.client.reset(
+            seed=seed_val,
+            difficulty=difficulty,
+            physics_hz=self.physics_hz,
+            action_hz=self.action_hz,
+            **extra_kwargs,
+        )
         fleet_obs = self._format_fleet_obs(raw_obs)
         return fleet_obs, info
 

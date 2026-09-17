@@ -110,19 +110,24 @@ func _on_arena_reset(seed_val: int, _difficulty: float) -> void:
 	total_fleet_delivered = 0
 	fleet_deadlock_timer = 0.0
 
-	# Reset Rack locations
+	# 1. Randomize Rack locations within realistic operational bounds
+	var rack_north_x = rng.randf_range(-1.2, 1.2)
+	var rack_north_z = rng.randf_range(-4.2, -3.6)
+	var rack_south_x = rng.randf_range(-1.2, 1.2)
+	var rack_south_z = rng.randf_range(3.6, 4.2)
+
 	if rack_north:
-		rack_north.global_position = Vector3(0.0, 0.02, -4.0)
+		rack_north.global_position = Vector3(rack_north_x, 0.02, rack_north_z)
 		rack_north.rotation = Vector3(0.0, PI, 0.0) # Faces south (+Z)
 	if rack_south:
-		rack_south.global_position = Vector3(0.0, 0.02, 4.0)
+		rack_south.global_position = Vector3(rack_south_x, 0.02, rack_south_z)
 		rack_south.rotation = Vector3.ZERO # Faces north (-Z)
 
-	# Reset North Rack Boxes onto physical shelves
+	# Reset North Rack Boxes onto physical shelves relative to randomized rack position
 	for i in range(min(boxes_north.size(), TOTE_SLOT_DEFS.size())):
 		var b = boxes_north[i]
 		var s_def = TOTE_SLOT_DEFS[i]
-		var world_pos = rack_north.to_global(s_def["offset"]) if rack_north else (Vector3(0.0, 0.0, -4.0) + s_def["offset"])
+		var world_pos = rack_north.to_global(s_def["offset"]) if rack_north else (Vector3(rack_north_x, 0.0, rack_north_z) + s_def["offset"])
 		b.visible = true
 		b.freeze = true
 		b.linear_velocity = Vector3.ZERO
@@ -133,11 +138,11 @@ func _on_arena_reset(seed_val: int, _difficulty: float) -> void:
 		b.global_position = world_pos
 		b.global_rotation = rack_north.global_rotation if rack_north else Vector3(0.0, PI, 0.0)
 
-	# Reset South Rack Boxes onto physical shelves
+	# Reset South Rack Boxes onto physical shelves relative to randomized rack position
 	for i in range(min(boxes_south.size(), TOTE_SLOT_DEFS.size())):
 		var b = boxes_south[i]
 		var s_def = TOTE_SLOT_DEFS[i]
-		var world_pos = rack_south.to_global(s_def["offset"]) if rack_south else (Vector3(0.0, 0.0, 4.0) + s_def["offset"])
+		var world_pos = rack_south.to_global(s_def["offset"]) if rack_south else (Vector3(rack_south_x, 0.0, rack_south_z) + s_def["offset"])
 		b.visible = true
 		b.freeze = true
 		b.linear_velocity = Vector3.ZERO
@@ -148,15 +153,32 @@ func _on_arena_reset(seed_val: int, _difficulty: float) -> void:
 		b.global_position = world_pos
 		b.global_rotation = rack_south.global_rotation if rack_south else Vector3.ZERO
 
-	# Reset Conveyor
-	if conveyor and conveyor.has_method("reset_conveyor"):
-		conveyor.reset_conveyor()
+	# 2. Randomize Conveyor dock position
+	var conv_x = rng.randf_range(5.0, 5.6)
+	var conv_z = rng.randf_range(-0.6, 0.6)
+	if conveyor:
+		conveyor.global_position = Vector3(conv_x, 0.0, conv_z)
+		conveyor.rotation = Vector3(0.0, PI / 2.0, 0.0) # Faces West (-X) into the central aisle
+		if conveyor.has_method("reset_conveyor"):
+			conveyor.reset_conveyor()
 
-	# Reset AMRs to staggered aisle starting positions
+	# 3. Randomize AMR aisle starting positions & orientations with guaranteed minimum 1.4m clearance
+	var p1_x = rng.randf_range(-5.8, -4.2)
+	var p1_z = rng.randf_range(-0.9, -0.2)
+	var p1_yaw = -PI / 2.0 + rng.randf_range(-0.25, 0.25)
+
+	var p2_x = rng.randf_range(-6.8, -5.2)
+	var p2_z = rng.randf_range(0.2, 0.9)
+	var p2_yaw = -PI / 2.0 + rng.randf_range(-0.25, 0.25)
+
+	if Vector2(p1_x - p2_x, p1_z - p2_z).length() < 1.4:
+		p2_x = p1_x - 1.5
+
 	var start_positions = [
-		Vector3(-4.0, 0.02, -0.8),
-		Vector3(-4.0, 0.02, 0.8)
+		Vector3(p1_x, 0.02, p1_z),
+		Vector3(p2_x, 0.02, p2_z)
 	]
+	var start_yaws = [p1_yaw, p2_yaw]
 
 	for i in range(amrs.size()):
 		var a = amrs[i]
@@ -170,32 +192,28 @@ func _on_arena_reset(seed_val: int, _difficulty: float) -> void:
 		st.assigned_rack_is_north = (i % 2 == 0)
 		st.assigned_box_idx = (i * 2) % 8
 		st.target_subgoal_pos = _get_box_target_world_pos(st.assigned_rack_is_north, st.assigned_box_idx)
+		print("[FleetAisleEnv] Reset Agent %d: north=%s box_idx=%d target=%s" % [i, str(st.assigned_rack_is_north), st.assigned_box_idx, str(st.target_subgoal_pos)])
 
 		if i < start_positions.size():
-			a.global_position = start_positions[i]
-			a.rotation = Vector3(0.0, 0.0 if i % 2 == 0 else PI, 0.0)
+			a.reset_robot(start_positions[i], start_yaws[i])
 
-		a.velocity = Vector3.ZERO
-		a._manual_linear_vel = 0.0
-		a._manual_angular_vel = 0.0
-		a._rl_target_v_lin = 0.0
-		a._rl_target_v_ang = 0.0
-		a.is_rl_control = true
-		a.is_manual_control = false
 		a.arm_tween_speed_scale = 3.5
 		a.held_box = null
-		a._clear_cargo_tray()
 		a._fold_arm_to_home_instant()
 
 		st.prev_subgoal_dist = a.global_position.distance_to(st.target_subgoal_pos)
 
 func _get_box_target_world_pos(is_north: bool, box_idx: int) -> Vector3:
-	var target_list = boxes_north if is_north else boxes_south
-	if box_idx >= 0 and box_idx < target_list.size() and is_instance_valid(target_list[box_idx]):
-		return target_list[box_idx].global_position
-	# Fallback coordinate
-	var z_sign = -1.0 if is_north else 1.0
-	return Vector3(0.0, 0.56, z_sign * 3.4)
+	var target_rack = rack_north if is_north else rack_south
+	var slot_idx = clampi(box_idx, 0, TOTE_SLOT_DEFS.size() - 1)
+	var s_def = TOTE_SLOT_DEFS[slot_idx]
+	var res = Vector3.ZERO
+	if target_rack:
+		res = target_rack.to_global(s_def["offset"])
+	else:
+		var z_sign = -1.0 if is_north else 1.0
+		res = Vector3(0.0, 0.02, z_sign * 4.0) + s_def["offset"]
+	return res
 
 func _get_conveyor_dock_pos() -> Vector3:
 	if drop_marker:
@@ -427,8 +445,9 @@ func _update_fleet_state_machine() -> void:
 
 		match st.sub_stage:
 			FleetSubStage.NAVIGATE_TO_RACK:
-				var dist = a.global_position.distance_to(st.target_subgoal_pos)
-				if dist <= 2.2 and a.current_speed <= 0.60:
+				var horiz_dist = Vector2(a.global_position.x - st.target_subgoal_pos.x, a.global_position.z - st.target_subgoal_pos.z).length()
+				var shoulder_dist = a.shoulder.global_position.distance_to(st.target_subgoal_pos) if a.shoulder else horiz_dist
+				if (horiz_dist <= 2.25 or shoulder_dist <= 2.15) and a.current_speed <= 0.65:
 					# Dock at rack and pick box via Phase 07 skill
 					st.sub_stage = FleetSubStage.DOCK_AND_PICK
 					st.is_docked = true
@@ -438,6 +457,8 @@ func _update_fleet_state_machine() -> void:
 				if a.held_box != null or a.arm_motion_state == a.ArmMotionState.HELD_READY:
 					st.sub_stage = FleetSubStage.TRAY_STOW
 					a.execute_dynamic_stow()
+				elif not a._is_arm_tweening and a.held_box == null:
+					_execute_agent_pick(st)
 
 			FleetSubStage.TRAY_STOW:
 				if a.get_stowed_box_count() > 0 and not a._is_arm_tweening:
@@ -448,13 +469,19 @@ func _update_fleet_state_machine() -> void:
 					st.prev_subgoal_dist = a.global_position.distance_to(st.target_subgoal_pos)
 
 			FleetSubStage.NAVIGATE_TO_CONVEYOR:
-				var dock_dist = a.global_position.distance_to(_get_conveyor_dock_pos())
-				if dock_dist <= 1.85 and a.current_speed <= 0.50:
-					# Arrived at Conveyor dock! Unstow and place
-					st.sub_stage = FleetSubStage.CONVEYOR_PLACE
-					st.is_docked = true
-					var drop_pos = _get_conveyor_dock_pos()
-					a.execute_dynamic_unstow_and_place(drop_pos)
+				var drop_pos = _get_conveyor_dock_pos()
+				var horiz_dock_dist = Vector2(a.global_position.x - drop_pos.x, a.global_position.z - drop_pos.z).length()
+				if horiz_dock_dist <= 2.30 and a.current_speed <= 0.65:
+					# Check if another AMR is actively placing to avoid simultaneous collision
+					var dock_busy: bool = false
+					for j in range(agent_states.size()):
+						if j != i and agent_states[j].sub_stage == FleetSubStage.CONVEYOR_PLACE:
+							dock_busy = true
+							break
+					if not dock_busy:
+						st.sub_stage = FleetSubStage.CONVEYOR_PLACE
+						st.is_docked = true
+						a.execute_dynamic_unstow_and_place(drop_pos)
 
 			FleetSubStage.CONVEYOR_PLACE:
 				if not a._is_arm_tweening and a.held_box == null and a.get_stowed_box_count() == 0:
@@ -462,7 +489,7 @@ func _update_fleet_state_machine() -> void:
 					total_fleet_delivered += 1
 					st.is_docked = false
 
-					# Retask agent to pick another box
+					# Retask agent to pick next available box
 					st.sub_stage = FleetSubStage.NAVIGATE_TO_RACK
 					st.assigned_box_idx = (st.assigned_box_idx + 2) % 8
 					st.target_subgoal_pos = _get_box_target_world_pos(st.assigned_rack_is_north, st.assigned_box_idx)
@@ -491,12 +518,21 @@ func _get_info() -> Dictionary:
 			"sub_stage": st.sub_stage,
 			"delivered": st.total_delivered,
 			"near_misses": st.near_miss_count,
-			"speed": st.amr.current_speed
+			"speed": st.amr.current_speed,
+			"pos": [st.amr.global_position.x, st.amr.global_position.y, st.amr.global_position.z],
+			"yaw": st.amr.rotation.y,
+			"target": [st.target_subgoal_pos.x, st.target_subgoal_pos.y, st.target_subgoal_pos.z]
 		})
 
 	return {
 		"total_fleet_delivered": total_fleet_delivered,
 		"global_state": _get_global_state(),
 		"agent_info": per_agent_info,
-		"num_amrs": amrs.size()
+		"num_amrs": amrs.size(),
+		"env_positions": {
+			"rack_north": [rack_north.global_position.x, rack_north.global_position.y, rack_north.global_position.z] if rack_north else [],
+			"rack_south": [rack_south.global_position.x, rack_south.global_position.y, rack_south.global_position.z] if rack_south else [],
+			"conveyor": [conveyor.global_position.x, conveyor.global_position.y, conveyor.global_position.z] if conveyor else [],
+			"conveyor_dock": [_get_conveyor_dock_pos().x, _get_conveyor_dock_pos().y, _get_conveyor_dock_pos().z]
+		}
 	}

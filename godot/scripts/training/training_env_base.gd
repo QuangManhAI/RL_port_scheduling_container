@@ -132,6 +132,17 @@ func _handle_client_message(msg: Dictionary) -> void:
 			step_count = 0
 			_action_tick_accumulator = 0.0
 
+			# Dynamic dual-clock synchronization from Python configs/config.yaml
+			if msg.has("physics_hz"):
+				var new_phz: int = int(msg["physics_hz"])
+				if new_phz > 0 and new_phz != physics_hz:
+					physics_hz = new_phz
+					Engine.physics_ticks_per_second = physics_hz
+			if msg.has("action_hz"):
+				var new_ahz: int = int(msg["action_hz"])
+				if new_ahz > 0:
+					action_hz = new_ahz
+
 			# Execute reset
 			_on_arena_reset(seed_val, current_difficulty)
 
