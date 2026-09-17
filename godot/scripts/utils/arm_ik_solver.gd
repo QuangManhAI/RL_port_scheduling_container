@@ -51,13 +51,21 @@ static func solve_local(target: Vector3, approach_pitch: float = 0.0) -> IKResul
 		return res
 
 	# 4. Planar projection for Two-Bone 2D IK
-	# Offset wrist backwards along horizontal approach direction by L3_GRIPPER
+	# Offset wrist backwards along approach direction by L3_GRIPPER
 	var r_wrist: float = r_total - L3_GRIPPER * cos(approach_pitch)
 	var y_wrist: float = p_sh.y - L3_GRIPPER * sin(approach_pitch)
 
 	var d_wrist: float = sqrt(r_wrist * r_wrist + y_wrist * y_wrist)
 	var max_two_bone: float = L1_BOOM + L2_FOREARM - 0.005
 	var min_two_bone: float = abs(L1_BOOM - L2_FOREARM) + 0.005
+
+	if (d_wrist > max_two_bone or d_wrist < min_two_bone) and approach_pitch == 0.0:
+		# Adaptive natural elevation pitch towards target (e.g. upper rack tiers)
+		var natural_pitch = clampf(atan2(p_sh.y, maxf(r_total, 0.1)), -deg_to_rad(30.0), deg_to_rad(35.0))
+		r_wrist = r_total - L3_GRIPPER * cos(natural_pitch)
+		y_wrist = p_sh.y - L3_GRIPPER * sin(natural_pitch)
+		d_wrist = sqrt(r_wrist * r_wrist + y_wrist * y_wrist)
+		approach_pitch = natural_pitch
 
 	if d_wrist > max_two_bone or d_wrist < min_two_bone:
 		res.success = false

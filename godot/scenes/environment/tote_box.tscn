@@ -16,8 +16,9 @@ size = Vector3(0.58, 0.32, 0.38)
 
 [node name="ToteBox" type="RigidBody3D"]
 collision_layer = 8
-collision_mask = 15
+collision_mask = 63
 mass = 12.0
+continuous_cd = true
 linear_damp = 0.8
 angular_damp = 1.2
 script = ExtResource("1_script")

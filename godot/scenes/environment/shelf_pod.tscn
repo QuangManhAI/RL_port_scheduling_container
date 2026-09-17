@@ -35,8 +35,9 @@ size = Vector3(0.66, 0.03, 0.46)
 
 [node name="ShelfPod" type="RigidBody3D"]
 collision_layer = 2
-collision_mask = 15
+collision_mask = 63
 mass = 280.0
+continuous_cd = true
 center_of_mass_mode = 1
 center_of_mass = Vector3(0, 0.75, 0)
 linear_damp = 1.0
@@ -63,16 +64,20 @@ shape = SubResource("BoxShape3D_leg")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 0)
 shape = SubResource("BoxShape3D_shelf_plate")
 
-[node name="ColShelfDiv1" type="CollisionShape3D" parent="."]
+[node name="ColShelfDivider1_2" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 shape = SubResource("BoxShape3D_shelf_plate")
 
-[node name="ColShelfDiv2" type="CollisionShape3D" parent="."]
+[node name="ColShelfDivider2_3" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.46, 0)
 shape = SubResource("BoxShape3D_shelf_plate")
 
-[node name="ColShelfDiv3" type="CollisionShape3D" parent="."]
+[node name="ColShelfDivider3_4" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.02, 0)
+shape = SubResource("BoxShape3D_shelf_plate")
+
+[node name="ColShelfTop" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.58, 0)
 shape = SubResource("BoxShape3D_shelf_plate")
 
 [node name="ColPanel_T1_L" type="CollisionShape3D" parent="."]
@@ -137,6 +142,10 @@ mesh = SubResource("BoxMesh_shelf_divider")
 
 [node name="ShelfDivider3_4" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.02, 0)
+mesh = SubResource("BoxMesh_shelf_divider")
+
+[node name="ShelfTop" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.58, 0)
 mesh = SubResource("BoxMesh_shelf_divider")
 
 [node name="Panel_T1_L" type="MeshInstance3D" parent="."]

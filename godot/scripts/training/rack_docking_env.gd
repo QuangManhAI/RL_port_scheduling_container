@@ -352,6 +352,12 @@ func _get_info() -> Dictionary:
 	var forward = -amr.global_transform.basis.z if amr else Vector3.FORWARD
 	var rack_norm = _get_rack_face_normal()
 	var fa = forward.dot(-rack_norm) if amr else 0.0
+	var col_name: String = ""
+	if amr and amr.get_slide_collision_count() > 0:
+		var c = amr.get_slide_collision(0).get_collider()
+		if c:
+			col_name = c.name
+			if c.get_parent(): col_name = c.get_parent().name + "/" + col_name
 	return {
 		"docking_success": docking_success,
 		"rack_toppled": rack_toppled,
@@ -363,4 +369,7 @@ func _get_info() -> Dictionary:
 		"face_align": fa,
 		"current_speed": amr.current_speed if amr else 0.0,
 		"step_count": step_count,
+		"arm_hit": amr.last_arm_hit if amr else "",
+		"col_count": amr.get_slide_collision_count() if amr else 0,
+		"col_name": col_name,
 	}
