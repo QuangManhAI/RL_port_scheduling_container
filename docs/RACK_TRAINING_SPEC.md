@@ -100,14 +100,20 @@ flowchart LR
   - $P_{\text{tilt}} = -10.0$ and episode termination if rack tilts $> 15^\circ$
   - $P_{\text{step}} = -0.01$
 
-### 4.2 Stage R2: Tier-Aware Fine Positioning
+### 4.2 Stage R2: Tier-Aware Fine Positioning & Arm IK Targeting [COMPLETED]
 - **Primary Goal**: Position chassis precisely so that `ArmIKSolver.solve_local()` yields a kinematically reachable solution for the specific target tier ($Y \in [0.56, 2.23]\text{ m}$) and slot ($X \in \{-0.36, 0.36\}\text{ m}$).
-- **Key Observation**: Tier 1 (low) permits a wider reach distance ($\approx 1.4\text{ m}$), whereas Tier 4 (high) requires closer chassis placement ($\approx 0.95\text{ m}$) due to robotic arm reach envelope.
-- **Reward**: Bonus awarded when `ik.success == true` for target box coordinate.
+- **Kinematic Dynamics**:
+  - Lower shelves (Tiers 1 & 2): Docking at $d \approx 2.30\text{m} - 2.36\text{m}$ satisfies reach ($IK \approx 1.95\text{m} - 2.05\text{m}$).
+  - Upper shelves (Tiers 3 & 4): The policy learned to drive closer into the bay ($d \approx 1.40\text{m} - 2.10\text{m}$) because vertical height takes up reach envelope.
+- **Benchmark Results (30 episodes)**:
+  - **Arm IK Reachability**: **96.7%** (29/30)
+  - **Docking Success**: **96.7%**
+  - **Topple Rate**: **0.0%** (0/30)
+  - **Native Parity**: Max deviation $1.55 \times 10^{-8}$
 
-### 4.3 Stage R3: Shelf Grasp & Cargo Stow
-- **Primary Goal**: Execute arm insertion into rack bay, clamp target box, retract cleanly along horizontal staging axis without dislodging adjacent boxes, and stow into cargo tray.
-- **Reward**: $+8.0$ on clean extraction and tray latching.
+### 4.3 Stage R3: Shelf Grasp & Cargo Stow [NEXT]
+- **Primary Goal**: Handover from R2 stance $\rightarrow$ Arm trajectory execution: extend end effector into shelf slot, clamp tote box, retract along horizontal staging axis without colliding with rack uprights, and stow safely onto the AMR's rear cargo tray.
+- **Reward**: $+8.0$ on clean extraction and tray latching; $-10.0$ on topple or shelf plate collision.
 
 ### 4.4 Stage R4: Unified Full Rack-to-Dispatch Cycle
 - **Primary Goal**: Single unified policy running end-to-end:
@@ -120,22 +126,30 @@ flowchart LR
 
 ```
 RL_port_scheduling_container/
+├── configs/
+│   └── config.yaml                                <-- Centralized 200 Hz physics / 60 Hz action clocks
 ├── docs/
 │   └── RACK_TRAINING_SPEC.md                      <-- This specification
 ├── godot/
+│   ├── models/
+│   │   ├── ppo_r1_policy.json                     <-- Stage R1 native policy
+│   │   └── ppo_r2_policy.json                     <-- Stage R2 native policy (IK validated)
 │   ├── scenes/
 │   │   └── training/
 │   │       ├── training_rack_docking.tscn         <-- Stage R1 scene
+│   │       ├── training_rack_targeting.tscn       <-- Stage R2 scene
 │   │       └── training_rack_cycle.tscn           <-- Stage R4 scene
 │   └── scripts/
 │       └── training/
-│           ├── rack_docking_env.gd                <-- R1 Godot environment controller
-│           └── rack_cycle_env.gd                  <-- R4 Godot cycle controller
+│           ├── rack_docking_env.gd                <-- Stage R1 controller
+│           ├── rack_targeting_env.gd              <-- Stage R2 controller
+│           └── rack_cycle_env.gd                  <-- Stage R4 controller
 └── src/
     ├── envs/
-    │   ├── rack_docking_gym_env.py                <-- R1 Gymnasium wrapper
-    │   └── rack_cycle_gym_env.py                  <-- R4 Gymnasium wrapper
+    │   ├── rack_docking_gym_env.py                <-- Stage R1 Gymnasium wrapper
+    │   └── rack_targeting_gym_env.py              <-- Stage R2 Gymnasium wrapper
     └── training/
-        ├── train_rack_r1.py                       <-- R1 training script (warm-start S1)
-        └── view_rack_policy.py                    <-- Visual evaluation viewer
+        ├── train_rack_r1.py                       <-- Stage R1 trainer
+        ├── train_rack_r2.py                       <-- Stage R2 trainer
+        └── view_policy.py                         <-- Dual-clock viewer (--stage r1, --stage r2)
 ```
