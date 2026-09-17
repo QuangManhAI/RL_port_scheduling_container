@@ -27,6 +27,8 @@ class GodotGymEnv(gym.Env):
         scene_path: str,
         port: int = 11000,
         ticks_per_step: int = 4,
+        physics_hz: int = 200,
+        action_hz: int = 60,
         headless: bool = True,
         autostart: bool = True,
     ) -> None:
@@ -34,6 +36,8 @@ class GodotGymEnv(gym.Env):
         self.scene_path = scene_path
         self.port = port
         self.ticks_per_step = ticks_per_step
+        self.physics_hz = physics_hz
+        self.action_hz = action_hz
         self.headless = headless
         self.autostart = autostart
 
@@ -63,6 +67,8 @@ class GodotGymEnv(gym.Env):
                 scene_path=self.scene_path,
                 port=self.port,
                 ticks_per_step=self.ticks_per_step,
+                physics_hz=self.physics_hz,
+                action_hz=self.action_hz,
                 headless=self.headless,
                 autostart=self.autostart,
             )

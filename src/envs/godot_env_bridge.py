@@ -137,6 +137,8 @@ class GodotEnvBridge:
         port: int = 11000,
         godot_bin: Optional[str] = None,
         ticks_per_step: int = 4,
+        physics_hz: int = 200,
+        action_hz: int = 60,
         headless: bool = True,
         autostart: bool = True,
     ) -> None:
@@ -144,6 +146,8 @@ class GodotEnvBridge:
         self.port = port
         self.godot_bin = godot_bin or find_godot_binary()
         self.ticks_per_step = ticks_per_step
+        self.physics_hz = physics_hz
+        self.action_hz = action_hz
         self.headless = headless
         self.process: Optional[subprocess.Popen] = None
         self.client: Optional[GodotTCPClient] = None
@@ -176,9 +180,11 @@ class GodotEnvBridge:
             self.godot_project_path,
             self.scene_path,
             f"--port={self.port}",
+            f"--physics_hz={self.physics_hz}",
+            f"--action_hz={self.action_hz}",
             f"--ticks={self.ticks_per_step}",
             "--fixed-fps",
-            "60",
+            str(self.physics_hz),
             "--max-fps",
             "0",
             "--disable-vsync",

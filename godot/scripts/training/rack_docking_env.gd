@@ -22,6 +22,10 @@ const TOTE_SLOT_DEFS: Array[Dictionary] = [
 	{"tier": 4, "side": "R", "side_val": 1.0, "offset": Vector3(0.36, 2.23, -0.60)},
 ]
 
+const NeuralPolicyScript = preload("res://scripts/ai/neural_policy.gd")
+@export var native_ai_mode: bool = false
+@export var policy_json_path: String = "res://models/ppo_r1_policy.json"
+
 var boxes: Array[ToteBox] = []
 var target_box_idx: int = 0
 var target_tier: int = 1
@@ -32,6 +36,11 @@ var docking_success: bool = false
 var rack_toppled: bool = false
 var wall_collided: bool = false
 
+var native_policy: RefCounted = null
+var _native_reset_timer: float = 0.0
+var _native_action_accum: float = 0.0
+var _current_native_act: Array = [0.0, 0.0, 0.0]
+
 var _mat_normal: StandardMaterial3D
 var _mat_highlight: StandardMaterial3D
 
@@ -40,6 +49,50 @@ func _ready() -> void:
 	_setup_materials()
 	_init_boxes()
 	super._ready()
+
+	# Check for command line flags for native execution
+	var args = OS.get_cmdline_user_args()
+	if args.is_empty(): args = OS.get_cmdline_args()
+	for a in args:
+		if a == "--native-ai" or a == "--native":
+			native_ai_mode = true
+
+	if native_ai_mode:
+		_init_native_ai()
+
+func _init_native_ai() -> void:
+	native_policy = NeuralPolicyScript.new()
+	if native_policy.load_from_json(policy_json_path):
+		print("[RackDockingEnv] Zero-Latency Native Dual-Clock In-Engine AI ACTIVATED!")
+		Engine.physics_ticks_per_second = physics_hz
+		print("  - Simulation Clock (Physics): %d Hz (Continuous high precision)" % physics_hz)
+		print("  - Action Decision Clock:      %d Hz (True step pacing)" % action_hz)
+		get_tree().paused = false
+		_on_arena_reset(0, 0.0)
+
+func _physics_process(delta: float) -> void:
+	if not native_ai_mode or not native_policy:
+		return
+
+	if docking_success or rack_toppled or wall_collided or step_count >= max_episode_steps:
+		_native_reset_timer += delta
+		if _native_reset_timer > 1.2:
+			_native_reset_timer = 0.0
+			_on_arena_reset(0, 0.0)
+		return
+
+	# Dual-clock accumulator: query neural policy at action_hz (60 Hz)
+	_native_action_accum += delta
+	var action_dt = 1.0 / float(max(1, action_hz))
+	if _native_action_accum >= action_dt:
+		_native_action_accum -= action_dt
+		step_count += 1
+		var obs = _compute_observation()
+		_current_native_act = native_policy.predict(obs)
+
+	# Apply action at 200 Hz simulation physics
+	_apply_action(_current_native_act)
+	_compute_reward(_current_native_act)
 
 func _setup_materials() -> void:
 	_mat_normal = StandardMaterial3D.new()
