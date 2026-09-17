@@ -95,9 +95,20 @@ class GodotTCPClient:
 
         return json.loads(payload_data.decode("utf-8"))
 
-    def reset(self, seed: int = 0, difficulty: float = 0.0) -> Tuple[List[float], Dict[str, Any]]:
+    def reset(
+        self,
+        seed: int = 0,
+        difficulty: float = 0.0,
+        full_tray: bool = False,
+        multi_box: bool = False,
+    ) -> Tuple[List[float], Dict[str, Any]]:
         """Send reset command and receive initial observation."""
-        self.send_message({"command": "reset", "seed": seed, "difficulty": difficulty})
+        msg: Dict[str, Any] = {"command": "reset", "seed": seed, "difficulty": difficulty}
+        if full_tray:
+            msg["full_tray"] = True
+        if multi_box:
+            msg["multi_box"] = True
+        self.send_message(msg)
         res = self.receive_message()
         obs = res.get("observation", [])
         info = res.get("info", {})
@@ -207,10 +218,16 @@ class GodotEnvBridge:
             self.close()
             raise RuntimeError(f"Failed to connect to Godot on port {self.port}: {e}")
 
-    def reset(self, seed: int = 0, difficulty: float = 0.0) -> Tuple[List[float], Dict[str, Any]]:
+    def reset(
+        self,
+        seed: int = 0,
+        difficulty: float = 0.0,
+        full_tray: bool = False,
+        multi_box: bool = False,
+    ) -> Tuple[List[float], Dict[str, Any]]:
         if not self.client:
             raise RuntimeError("Bridge not started.")
-        return self.client.reset(seed, difficulty)
+        return self.client.reset(seed, difficulty, full_tray=full_tray, multi_box=multi_box)
 
     def step(self, action: List[float]) -> Tuple[List[float], float, bool, bool, Dict[str, Any]]:
         if not self.client:

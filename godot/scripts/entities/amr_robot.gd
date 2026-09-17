@@ -417,8 +417,13 @@ func execute_dynamic_pick(target_box: ToteBox) -> void:
 			gripped_socket.add_child(held_box)
 			held_box.transform = Transform3D.IDENTITY
 
-			# Temporarily isolate collision with shelf during extraction so held box never levers against rack
-			held_box.set_collision_mask_value(2, false)
+			# Isolate collision while gripped in arm socket to prevent chassis self-collision physics explosion
+			held_box.collision_mask = 0
+			add_collision_exception_with(held_box)
+			held_box.add_collision_exception_with(self)
+			if tray_body:
+				held_box.add_collision_exception_with(tray_body)
+				tray_body.add_collision_exception_with(held_box)
 
 			SoundManager.play_spatial(self, SoundManager.sfx_box_pick, +2.0)
 	)
@@ -515,9 +520,12 @@ func execute_dynamic_stow() -> void:
 			held_box.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 			held_box.freeze = true
 			held_box.sleeping = false
-			held_box.set_collision_mask_value(2, true)
+			held_box.collision_mask = 2 | 8
 			add_collision_exception_with(held_box)
 			held_box.add_collision_exception_with(self)
+			if tray_body:
+				held_box.add_collision_exception_with(tray_body)
+				tray_body.add_collision_exception_with(held_box)
 			held_box = null
 
 			SoundManager.play_spatial(self, SoundManager.sfx_box_stow, +1.0)
@@ -696,7 +704,12 @@ func execute_dynamic_unstow_and_place(target_deck_world: Vector3) -> bool:
 					held_box.get_parent().remove_child(held_box)
 				gripped_socket.add_child(held_box)
 				held_box.transform = Transform3D.IDENTITY
-				held_box.set_collision_mask_value(2, false)
+				held_box.collision_mask = 0 # Isolate collision while gripped in arm
+				add_collision_exception_with(held_box)
+				held_box.add_collision_exception_with(self)
+				if tray_body:
+					held_box.add_collision_exception_with(tray_body)
+					tray_body.add_collision_exception_with(held_box)
 				SoundManager.play_spatial(self, SoundManager.sfx_box_pick, +1.0)
 		)
 
@@ -727,15 +740,17 @@ func execute_dynamic_unstow_and_place(target_deck_world: Vector3) -> bool:
 			held_box.get_parent().remove_child(held_box)
 			_get_world_root().add_child(held_box)
 			held_box.global_transform = final_world_tform
-			held_box.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
 			held_box.freeze = false
 			held_box.sleeping = false
-			held_box.set_collision_mask_value(2, true)
+			held_box.collision_mask = 63 # Restore full physics collision on conveyor deck
 			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_SLEEPING, false)
-			held_box.linear_velocity = Vector3(0.0, -0.15, 0.0)
+			held_box.linear_velocity = Vector3.ZERO
 			held_box.angular_velocity = Vector3.ZERO
 			remove_collision_exception_with(held_box)
 			held_box.remove_collision_exception_with(self)
+			if tray_body:
+				held_box.remove_collision_exception_with(tray_body)
+				tray_body.remove_collision_exception_with(held_box)
 			held_box = null
 			SoundManager.play_spatial(self, SoundManager.sfx_box_stow, +1.0)
 	)
@@ -1248,11 +1263,10 @@ func reset_robot(spawn_pos: Vector3, spawn_rot_y: float = 0.0) -> void:
 	# Unparent all stowed boxes in cargo tray back to world root
 	if cargo_tray:
 		for child in cargo_tray.get_children():
-			if child is Node3D:
+			if child is ToteBox:
 				cargo_tray.remove_child(child)
 				_get_world_root().add_child(child)
-				if child is RigidBody3D:
-					child.freeze = false
+				child.freeze = false
 
 	active_target_box = null
 

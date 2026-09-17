@@ -89,11 +89,20 @@ class RackCycleGymEnv(gym.Env):
 
         seed_val = seed if seed is not None else 0
         difficulty = 0.0
-        if options and "difficulty" in options:
-            difficulty = float(options["difficulty"])
+        full_tray = False
+        multi_box = False
+        if options:
+            difficulty = float(options.get("difficulty", 0.0))
+            full_tray = bool(options.get("full_tray", False))
+            multi_box = bool(options.get("multi_box", False))
 
         assert self.bridge is not None
-        raw_obs, info = self.bridge.reset(seed=seed_val, difficulty=difficulty)
+        raw_obs, info = self.bridge.reset(
+            seed=seed_val,
+            difficulty=difficulty,
+            full_tray=full_tray,
+            multi_box=multi_box,
+        )
 
         obs = np.array(raw_obs, dtype=np.float32)
         if obs.shape != self.observation_space.shape:

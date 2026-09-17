@@ -19,6 +19,7 @@ var client: StreamPeerTCP
 var active_port: int = 11000
 var step_count: int = 0
 var current_difficulty: float = 0.0
+var last_reset_msg: Dictionary = {}
 var is_client_connected: bool = false
 var _is_processing_step: bool = false
 var _action_tick_accumulator: float = 0.0
@@ -125,6 +126,7 @@ func _handle_client_message(msg: Dictionary) -> void:
 	match cmd:
 		"reset":
 			_is_processing_step = true
+			last_reset_msg = msg
 			var seed_val: int = int(msg.get("seed", 0))
 			current_difficulty = float(msg.get("difficulty", 0.0))
 			step_count = 0
