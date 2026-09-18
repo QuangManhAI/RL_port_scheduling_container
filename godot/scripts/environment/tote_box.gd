@@ -24,7 +24,7 @@ func _ready() -> void:
 	add_to_group("tote_boxes")
 	# Live physics: NEVER artificially frozen. Rests on physical shelf plates under gravity.
 	freeze = false
-	can_sleep = true
+	can_sleep = false
 
 func dock_to_shelf(shelf: ShelfPod, p_tier: int, p_side: String, p_offset: Vector3, mat: Material, p_zone: String, p_cat: String, p_initial_world_pos: Vector3 = Vector3.ZERO) -> void:
 	home_shelf = shelf

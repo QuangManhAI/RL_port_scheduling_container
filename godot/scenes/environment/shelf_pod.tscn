@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3 uid="uid://dmx3shelf003"]
+[gd_scene load_steps=22 format=3 uid="uid://dmx3shelf003"]
 
 [ext_resource type="Script" path="res://scripts/environment/shelf_pod.gd" id="1_script"]
 
@@ -21,15 +21,103 @@ size = Vector3(0.1, 2.8, 0.1)
 [sub_resource type="BoxShape3D" id="BoxShape3D_shelf_plate"]
 size = Vector3(1.6, 0.05, 1.6)
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_slot_panel"]
+albedo_color = Color(0.18, 0.22, 0.28, 1)
+roughness = 0.4
+metallic = 0.7
+
+[sub_resource type="BoxMesh" id="BoxMesh_slot_panel"]
+material = SubResource("StandardMaterial3D_slot_panel")
+size = Vector3(0.66, 0.03, 0.46)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_slot_panel"]
+size = Vector3(0.66, 0.03, 0.46)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_foot"]
+albedo_color = Color(0.06, 0.06, 0.07, 1)
+roughness = 0.85
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_foot"]
+material = SubResource("StandardMaterial3D_foot")
+top_radius = 0.09
+bottom_radius = 0.1
+height = 0.06
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hazard_yellow"]
+albedo_color = Color(1.0, 0.75, 0.05, 1)
+roughness = 0.5
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hazard_black"]
+albedo_color = Color(0.05, 0.05, 0.05, 1)
+roughness = 0.6
+
+[sub_resource type="BoxMesh" id="BoxMesh_guard_yellow"]
+material = SubResource("StandardMaterial3D_hazard_yellow")
+size = Vector3(0.12, 0.05, 0.12)
+
+[sub_resource type="BoxMesh" id="BoxMesh_guard_black"]
+material = SubResource("StandardMaterial3D_hazard_black")
+size = Vector3(0.12, 0.05, 0.12)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_led_t1"]
+albedo_color = Color(0.2, 0.8, 1, 1)
+emission_enabled = true
+emission = Color(0.2, 0.8, 1, 1)
+emission_energy_multiplier = 2.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_led_t2"]
+albedo_color = Color(0.1, 0.95, 0.5, 1)
+emission_enabled = true
+emission = Color(0.1, 0.95, 0.5, 1)
+emission_energy_multiplier = 2.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_led_t3"]
+albedo_color = Color(1, 0.65, 0.1, 1)
+emission_enabled = true
+emission = Color(1, 0.65, 0.1, 1)
+emission_energy_multiplier = 2.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_led_t4"]
+albedo_color = Color(1, 0.88, 0.2, 1)
+emission_enabled = true
+emission = Color(1, 0.88, 0.2, 1)
+emission_energy_multiplier = 2.0
+
+[sub_resource type="BoxMesh" id="BoxMesh_led_t1"]
+material = SubResource("StandardMaterial3D_led_t1")
+size = Vector3(0.05, 0.02, 0.02)
+
+[sub_resource type="BoxMesh" id="BoxMesh_led_t2"]
+material = SubResource("StandardMaterial3D_led_t2")
+size = Vector3(0.05, 0.02, 0.02)
+
+[sub_resource type="BoxMesh" id="BoxMesh_led_t3"]
+material = SubResource("StandardMaterial3D_led_t3")
+size = Vector3(0.05, 0.02, 0.02)
+
+[sub_resource type="BoxMesh" id="BoxMesh_led_t4"]
+material = SubResource("StandardMaterial3D_led_t4")
+size = Vector3(0.05, 0.02, 0.02)
+
+[sub_resource type="BoxMesh" id="BoxMesh_brace_bottom"]
+material = SubResource("StandardMaterial3D_metal_frame")
+size = Vector3(1.5977, 0.035, 0.035)
+
+[sub_resource type="BoxMesh" id="BoxMesh_brace_top"]
+material = SubResource("StandardMaterial3D_metal_frame")
+size = Vector3(1.6011, 0.035, 0.035)
+
 [node name="ShelfPod" type="RigidBody3D"]
 collision_layer = 2
-collision_mask = 15
-mass = 280.0
+mass = 220.0
+can_sleep = false
+continuous_cd = true
 center_of_mass_mode = 1
-center_of_mass = Vector3(0, 0.75, 0)
-linear_damp = 1.0
-angular_damp = 1.5
+center_of_mass = Vector3(0, 1.35, 0)
+linear_damp = 0.4
+angular_damp = 0.6
 script = ExtResource("1_script")
+
 
 [node name="ColLegFL" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 1.4, -0.75)
@@ -51,17 +139,53 @@ shape = SubResource("BoxShape3D_leg")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 0)
 shape = SubResource("BoxShape3D_shelf_plate")
 
-[node name="ColShelfDiv1" type="CollisionShape3D" parent="."]
+[node name="ColShelfDivider1_2" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 shape = SubResource("BoxShape3D_shelf_plate")
 
-[node name="ColShelfDiv2" type="CollisionShape3D" parent="."]
+[node name="ColShelfDivider2_3" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.46, 0)
 shape = SubResource("BoxShape3D_shelf_plate")
 
-[node name="ColShelfDiv3" type="CollisionShape3D" parent="."]
+[node name="ColShelfDivider3_4" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.02, 0)
 shape = SubResource("BoxShape3D_shelf_plate")
+
+[node name="ColShelfTop" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.58, 0)
+shape = SubResource("BoxShape3D_shelf_plate")
+
+[node name="ColPanel_T1_L" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 0.385, -0.6)
+shape = SubResource("BoxShape3D_slot_panel")
+
+[node name="ColPanel_T1_R" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 0.385, -0.6)
+shape = SubResource("BoxShape3D_slot_panel")
+
+[node name="ColPanel_T2_L" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 0.935, -0.6)
+shape = SubResource("BoxShape3D_slot_panel")
+
+[node name="ColPanel_T2_R" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 0.935, -0.6)
+shape = SubResource("BoxShape3D_slot_panel")
+
+[node name="ColPanel_T3_L" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 1.495, -0.6)
+shape = SubResource("BoxShape3D_slot_panel")
+
+[node name="ColPanel_T3_R" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 1.495, -0.6)
+shape = SubResource("BoxShape3D_slot_panel")
+
+[node name="ColPanel_T4_L" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 2.055, -0.6)
+shape = SubResource("BoxShape3D_slot_panel")
+
+[node name="ColPanel_T4_R" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 2.055, -0.6)
+shape = SubResource("BoxShape3D_slot_panel")
 
 [node name="LegFL" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 1.4, -0.75)
@@ -94,6 +218,138 @@ mesh = SubResource("BoxMesh_shelf_divider")
 [node name="ShelfDivider3_4" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.02, 0)
 mesh = SubResource("BoxMesh_shelf_divider")
+
+[node name="ShelfTop" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.58, 0)
+mesh = SubResource("BoxMesh_shelf_divider")
+
+[node name="Panel_T1_L" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 0.385, -0.6)
+mesh = SubResource("BoxMesh_slot_panel")
+
+[node name="Panel_T1_R" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 0.385, -0.6)
+mesh = SubResource("BoxMesh_slot_panel")
+
+[node name="Panel_T2_L" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 0.935, -0.6)
+mesh = SubResource("BoxMesh_slot_panel")
+
+[node name="Panel_T2_R" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 0.935, -0.6)
+mesh = SubResource("BoxMesh_slot_panel")
+
+[node name="Panel_T3_L" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 1.495, -0.6)
+mesh = SubResource("BoxMesh_slot_panel")
+
+[node name="Panel_T3_R" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 1.495, -0.6)
+mesh = SubResource("BoxMesh_slot_panel")
+
+[node name="Panel_T4_L" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 2.055, -0.6)
+mesh = SubResource("BoxMesh_slot_panel")
+
+[node name="Panel_T4_R" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 2.055, -0.6)
+mesh = SubResource("BoxMesh_slot_panel")
+
+[node name="FootFL" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0.03, -0.75)
+mesh = SubResource("CylinderMesh_foot")
+
+[node name="FootFR" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0.03, -0.75)
+mesh = SubResource("CylinderMesh_foot")
+
+[node name="FootBL" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0.03, 0.75)
+mesh = SubResource("CylinderMesh_foot")
+
+[node name="FootBR" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0.03, 0.75)
+mesh = SubResource("CylinderMesh_foot")
+
+[node name="GuardFL_Y" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0.085, -0.75)
+mesh = SubResource("BoxMesh_guard_yellow")
+
+[node name="GuardFL_B" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0.135, -0.75)
+mesh = SubResource("BoxMesh_guard_black")
+
+[node name="GuardFR_Y" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0.085, -0.75)
+mesh = SubResource("BoxMesh_guard_yellow")
+
+[node name="GuardFR_B" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0.135, -0.75)
+mesh = SubResource("BoxMesh_guard_black")
+
+[node name="GuardBL_Y" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0.085, 0.75)
+mesh = SubResource("BoxMesh_guard_yellow")
+
+[node name="GuardBL_B" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0.135, 0.75)
+mesh = SubResource("BoxMesh_guard_black")
+
+[node name="GuardBR_Y" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0.085, 0.75)
+mesh = SubResource("BoxMesh_guard_yellow")
+
+[node name="GuardBR_B" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0.135, 0.75)
+mesh = SubResource("BoxMesh_guard_black")
+
+[node name="BraceBottom1" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.9389, 0.3443, 0, -0.3443, 0.9389, 0, 0, 0, 1, 0, 0.625, 0.75)
+mesh = SubResource("BoxMesh_brace_bottom")
+
+[node name="BraceBottom2" type="MeshInstance3D" parent="."]
+transform = Transform3D(-0.9389, 0.3443, 0, -0.3443, -0.9389, 0, 0, 0, 1, 0, 0.625, 0.75)
+mesh = SubResource("BoxMesh_brace_bottom")
+
+[node name="BraceTop1" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.9368, 0.3498, 0, -0.3498, 0.9368, 0, 0, 0, 1, 0, 2.3, 0.75)
+mesh = SubResource("BoxMesh_brace_top")
+
+[node name="BraceTop2" type="MeshInstance3D" parent="."]
+transform = Transform3D(-0.9368, 0.3498, 0, -0.3498, -0.9368, 0, 0, 0, 1, 0, 2.3, 0.75)
+mesh = SubResource("BoxMesh_brace_top")
+
+[node name="LedT1_L" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 0.40, -0.85)
+mesh = SubResource("BoxMesh_led_t1")
+
+[node name="LedT1_R" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 0.40, -0.85)
+mesh = SubResource("BoxMesh_led_t1")
+
+[node name="LedT2_L" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 0.95, -0.85)
+mesh = SubResource("BoxMesh_led_t2")
+
+[node name="LedT2_R" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 0.95, -0.85)
+mesh = SubResource("BoxMesh_led_t2")
+
+[node name="LedT3_L" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 1.51, -0.85)
+mesh = SubResource("BoxMesh_led_t3")
+
+[node name="LedT3_R" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 1.51, -0.85)
+mesh = SubResource("BoxMesh_led_t3")
+
+[node name="LedT4_L" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 2.07, -0.85)
+mesh = SubResource("BoxMesh_led_t4")
+
+[node name="LedT4_R" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 2.07, -0.85)
+mesh = SubResource("BoxMesh_led_t4")
 
 [node name="PodLabel" type="Label3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 0)

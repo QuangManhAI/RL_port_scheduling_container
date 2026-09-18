@@ -50,7 +50,15 @@ const COLOR_CHARGING: Color = Color(0.1, 0.9, 0.4)     # Emerald (Charging)
 @onready var finger_right: Node3D = $RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/FingerRight
 @onready var gripped_socket: Node3D = $RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/GrippedBoxSocket
 
+@onready var arm_base_body: AnimatableBody3D = $RoboticArm/ArmBaseBody
+@onready var boom_body: AnimatableBody3D = $RoboticArm/ShoulderJoint/BoomBody
+@onready var forearm_body: AnimatableBody3D = $RoboticArm/ShoulderJoint/ElbowJoint/ForearmBody
+@onready var gripper_body: AnimatableBody3D = $RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/GripperBody
+@onready var finger_left_body: AnimatableBody3D = $RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/FingerLeft/FingerLeftBody
+@onready var finger_right_body: AnimatableBody3D = $RoboticArm/ShoulderJoint/ElbowJoint/WristJoint/FingerRight/FingerRightBody
+
 @onready var cargo_tray: Node3D = $Chassis/CargoTray
+@onready var tray_body: AnimatableBody3D = $Chassis/CargoTray/TrayBody
 @onready var slot_1_marker: Marker3D = $Chassis/CargoTray/Slot1Marker
 @onready var slot_2_marker: Marker3D = $Chassis/CargoTray/Slot2Marker
 @onready var slot_1_sensor: Area3D = $Chassis/CargoTray/Slot1Sensor
@@ -64,10 +72,10 @@ const COLOR_CHARGING: Color = Color(0.1, 0.9, 0.4)     # Emerald (Charging)
 
 # Compact Folded Rest Pose Constants
 const REST_ARM_YAW: float = 0.0
-const REST_SHOULDER_PITCH: float = -1.18682  # deg_to_rad(-68.0): folded forward-down along chassis
-const REST_ELBOW_PITCH: float = 2.44346      # deg_to_rad(140.0): folded tightly back above boom
-const REST_WRIST_PITCH: float = -1.25664     # deg_to_rad(-72.0): gripper level and tucked
-const REST_FINGER_SPAN: float = 0.16         # Neatly closed parking width
+const REST_SHOULDER_PITCH: float = 0.0  # Upright mast safely behind front bumper (z = -0.42m)
+const REST_ELBOW_PITCH: float = 0.0     # Aligned mast
+const REST_WRIST_PITCH: float = 0.0     # Level gripper
+const REST_FINGER_SPAN: float = 0.16    # Neatly closed parking width
 
 var current_state: AmrState = AmrState.IDLE
 var arm_motion_state: ArmMotionState = ArmMotionState.STATIONARY
@@ -90,6 +98,9 @@ var is_rl_control: bool = false
 var _rl_target_v_lin: float = 0.0
 var _rl_target_v_ang: float = 0.0
 var _manual_angular_vel: float = 0.0
+var last_arm_hit: String = ""
+var arm_tween_speed_scale: float = 1.0
+var _current_arm_tween: Tween = null
 
 func _ready() -> void:
 	_led_material = StandardMaterial3D.new()
@@ -122,19 +133,11 @@ func _process(_delta: float) -> void:
 ## Physical Sensor & Scene Queries for Payload Presence in Cargo Tray
 func get_slot_box(slot_idx: int) -> ToteBox:
 	var marker: Marker3D = slot_1_marker if slot_idx == 0 else slot_2_marker
-	if cargo_tray:
+	if cargo_tray and marker:
 		for child in cargo_tray.get_children():
 			if child is ToteBox and is_instance_valid(child) and child != held_box and child.visible:
-				if marker:
-					if child.position.distance_to(marker.position) < 0.35:
-						return child
-				else:
+				if child.position.distance_to(marker.position) < 0.28:
 					return child
-	var sensor: Area3D = slot_1_sensor if slot_idx == 0 else slot_2_sensor
-	if sensor:
-		for body in sensor.get_overlapping_bodies():
-			if body is ToteBox and is_instance_valid(body) and body != held_box and body.visible:
-				return body
 	return null
 
 func is_slot_occupied(slot_idx: int) -> bool:
@@ -142,8 +145,10 @@ func is_slot_occupied(slot_idx: int) -> bool:
 
 func get_stowed_box_count() -> int:
 	var count: int = 0
-	if is_slot_occupied(0): count += 1
-	if is_slot_occupied(1): count += 1
+	if cargo_tray:
+		for child in cargo_tray.get_children():
+			if child is ToteBox and is_instance_valid(child) and child != held_box and child.visible:
+				count += 1
 	return count
 
 func get_first_empty_slot() -> int:
@@ -321,7 +326,7 @@ func execute_dynamic_pick(target_box: ToteBox) -> void:
 	var box_pos: Vector3 = target_box.global_position
 	var is_on_shelf: bool = box_pos.y > 0.45
 
-	# 1. Calculate staging and grasp waypoints
+	# 1. Calculate staging and grasp waypoints with full collision clearance outside bay
 	var staging_pos: Vector3
 	if is_on_shelf:
 		var dir_to_amr: Vector3 = (global_position - box_pos)
@@ -330,11 +335,13 @@ func execute_dynamic_pick(target_box: ToteBox) -> void:
 			dir_to_amr = dir_to_amr.normalized()
 		else:
 			dir_to_amr = -global_transform.basis.z
+		# Pull back 0.48m so 26cm fingers are completely outside the front face of the 38cm box with 5cm margin
+		# Plus +0.07m vertical clearance to guarantee the box base never drags across shelf plates during extraction
 		var local_dist: float = arm.to_local(box_pos).length()
-		var pullback: float = clampf(local_dist - 0.32, 0.10, 0.25)
-		staging_pos = box_pos + dir_to_amr * pullback
+		var pullback: float = clampf(local_dist - 0.45, 0.42, 0.52)
+		staging_pos = box_pos + dir_to_amr * pullback + Vector3(0.0, 0.07, 0.0)
 	else:
-		staging_pos = box_pos + Vector3(0.0, 0.22, 0.0)
+		staging_pos = box_pos + Vector3(0.0, 0.35, 0.0)
 
 	var ik_grasp = ArmIKSolver.solve_local(arm.to_local(box_pos))
 	if not ik_grasp.success:
@@ -349,7 +356,7 @@ func execute_dynamic_pick(target_box: ToteBox) -> void:
 	var ik_staging = ArmIKSolver.solve_local(arm.to_local(staging_pos))
 	if not ik_staging.success:
 		# Fallback: elevate staging slightly above grasp pose
-		staging_pos = box_pos + Vector3(0.0, 0.12, 0.0)
+		staging_pos = box_pos + Vector3(0.0, 0.16, 0.0)
 		ik_staging = ArmIKSolver.solve_local(arm.to_local(staging_pos))
 		if not ik_staging.success:
 			ik_staging = ik_grasp
@@ -358,8 +365,12 @@ func execute_dynamic_pick(target_box: ToteBox) -> void:
 	_update_dev_status_label()
 
 	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_current_arm_tween = tween
+	if arm_tween_speed_scale != 1.0:
+		tween.set_speed_scale(arm_tween_speed_scale)
 
-	# --- STAGE 1: Pre-Grasp Staging & Gripper Opening ---
+	# --- STAGE 1: Pre-Grasp Staging & Gripper Opening in Aisle ---
+	# Open fingers wide to 68cm span WHILE OUTSIDE IN AISLE before any insertion into the bay
 	tween.tween_property(arm, "rotation:y", ik_staging.base_yaw, 0.45)
 	tween.parallel().tween_property(shoulder, "rotation:x", ik_staging.shoulder_pitch, 0.45)
 	tween.parallel().tween_property(elbow, "rotation:x", ik_staging.elbow_pitch, 0.45)
@@ -368,14 +379,15 @@ func execute_dynamic_pick(target_box: ToteBox) -> void:
 	if finger_right: tween.parallel().tween_property(finger_right, "position:x", 0.34, 0.35)
 
 	# --- STAGE 2: Linear Horizontal Insertion into Bay ---
+	# Open fingers slide cleanly along sides of box without touching or phasing through front face
 	tween.tween_callback(func():
 		arm_motion_state = ArmMotionState.INSERTING
 		_arm_status_text = "Stage 2: Linear Insertion into bay..."
 		_update_dev_status_label()
 	)
-	tween.tween_property(shoulder, "rotation:x", ik_grasp.shoulder_pitch, 0.35)
-	tween.parallel().tween_property(elbow, "rotation:x", ik_grasp.elbow_pitch, 0.35)
-	tween.parallel().tween_property(wrist, "rotation:x", ik_grasp.wrist_pitch, 0.35)
+	tween.tween_property(shoulder, "rotation:x", ik_grasp.shoulder_pitch, 0.38)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_grasp.elbow_pitch, 0.38)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_grasp.wrist_pitch, 0.38)
 
 	# --- STAGE 3: Bilateral Clamping onto Box ---
 	tween.tween_callback(func():
@@ -399,19 +411,39 @@ func execute_dynamic_pick(target_box: ToteBox) -> void:
 			gripped_socket.add_child(held_box)
 			held_box.transform = Transform3D.IDENTITY
 
+			# Isolate collision while gripped in arm socket to prevent chassis self-collision physics explosion
+			held_box.collision_mask = 0
+			add_collision_exception_with(held_box)
+			held_box.add_collision_exception_with(self)
+			if tray_body:
+				held_box.add_collision_exception_with(tray_body)
+				tray_body.add_collision_exception_with(held_box)
+
 			SoundManager.play_spatial(self, SoundManager.sfx_box_pick, +2.0)
 	)
 
-	# --- STAGE 4: Linear Retraction with Box ---
-	tween.tween_interval(0.08)
+	# --- STAGE 3.5: Vertical Pre-Lift inside bay (+6cm) ---
+	# Unseats box cleanly from shelf plate before horizontal retraction begins
+	if is_on_shelf:
+		var lift_target = box_pos + Vector3(0.0, 0.06, 0.0)
+		var ik_lift = ArmIKSolver.solve_local(arm.to_local(lift_target))
+		if ik_lift.success:
+			tween.tween_interval(0.05)
+			tween.tween_property(shoulder, "rotation:x", ik_lift.shoulder_pitch, 0.18)
+			tween.parallel().tween_property(elbow, "rotation:x", ik_lift.elbow_pitch, 0.18)
+			tween.parallel().tween_property(wrist, "rotation:x", ik_lift.wrist_pitch, 0.18)
+
+	# --- STAGE 4: Linear Retraction with Box back into Aisle ---
+	# Pull box straight back along horizontal elevated staging axis into open aisle before folding
+	tween.tween_interval(0.06)
 	tween.tween_callback(func():
 		arm_motion_state = ArmMotionState.RETRACTING
 		_arm_status_text = "Stage 4: Retracting into aisle..."
 		_update_dev_status_label()
 	)
-	tween.tween_property(shoulder, "rotation:x", ik_staging.shoulder_pitch, 0.38)
-	tween.parallel().tween_property(elbow, "rotation:x", ik_staging.elbow_pitch, 0.38)
-	tween.parallel().tween_property(wrist, "rotation:x", ik_staging.wrist_pitch, 0.38)
+	tween.tween_property(shoulder, "rotation:x", ik_staging.shoulder_pitch, 0.40)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_staging.elbow_pitch, 0.40)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_staging.wrist_pitch, 0.40)
 
 	# --- STAGE 5: Held Ready in Aisle ---
 	tween.finished.connect(func():
@@ -443,7 +475,8 @@ func execute_dynamic_stow() -> void:
 
 	var slot_marker: Marker3D = slot_1_marker if target_slot_idx == 0 else slot_2_marker
 	var slot_world: Vector3 = slot_marker.global_position
-	var slot_staging_world: Vector3 = slot_world + Vector3(0.0, 0.28, 0.0)
+	# High-clearance waypoint (+0.52m) so bottom of carried box (height 0.32m) clears tray rails (0.12m) by 20cm
+	var slot_staging_world: Vector3 = slot_world + Vector3(0.0, 0.52, 0.0)
 
 	var ik_staging = ArmIKSolver.solve_local(arm.to_local(slot_staging_world))
 	var ik_place = ArmIKSolver.solve_local(arm.to_local(slot_world))
@@ -452,17 +485,20 @@ func execute_dynamic_stow() -> void:
 	_update_dev_status_label()
 
 	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	_current_arm_tween = tween
+	if arm_tween_speed_scale != 1.0:
+		tween.set_speed_scale(arm_tween_speed_scale)
 
-	# 1. Swivel 180 degrees backwards over active slot
+	# 1. Swivel 180 degrees backwards over active slot at high altitude (above tray rails)
 	tween.tween_property(arm, "rotation:y", ik_staging.base_yaw, 0.45)
 	tween.parallel().tween_property(shoulder, "rotation:x", ik_staging.shoulder_pitch, 0.45)
 	tween.parallel().tween_property(elbow, "rotation:x", ik_staging.elbow_pitch, 0.45)
 	tween.parallel().tween_property(wrist, "rotation:x", ik_staging.wrist_pitch, 0.45)
 
-	# 2. Lower into slot bed (box bottom sits flush on tray floor)
-	tween.tween_property(shoulder, "rotation:x", ik_place.shoulder_pitch, 0.28)
-	tween.parallel().tween_property(elbow, "rotation:x", ik_place.elbow_pitch, 0.28)
-	tween.parallel().tween_property(wrist, "rotation:x", ik_place.wrist_pitch, 0.28)
+	# 2. Lower cleanly straight down into slot bed (box bottom sits flush on tray floor)
+	tween.tween_property(shoulder, "rotation:x", ik_place.shoulder_pitch, 0.30)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_place.elbow_pitch, 0.30)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_place.wrist_pitch, 0.30)
 
 	# 3. Open fingers and release payload cleanly into tray bed
 	if finger_left: tween.tween_property(finger_left, "position:x", -0.34, 0.18)
@@ -478,17 +514,29 @@ func execute_dynamic_stow() -> void:
 			held_box.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 			held_box.freeze = true
 			held_box.sleeping = false
+			held_box.collision_mask = 2 | 8
+			add_collision_exception_with(held_box)
+			held_box.add_collision_exception_with(self)
+			if tray_body:
+				held_box.add_collision_exception_with(tray_body)
+				tray_body.add_collision_exception_with(held_box)
 			held_box = null
 
 			SoundManager.play_spatial(self, SoundManager.sfx_box_stow, +1.0)
 	)
 
-	# 4. Retract and fold arm back to compact rest pose
-	tween.tween_interval(0.10)
-	tween.tween_property(arm, "rotation:y", REST_ARM_YAW, 0.38)
-	tween.parallel().tween_property(shoulder, "rotation:x", REST_SHOULDER_PITCH, 0.38)
-	tween.parallel().tween_property(elbow, "rotation:x", REST_ELBOW_PITCH, 0.38)
-	tween.parallel().tween_property(wrist, "rotation:x", REST_WRIST_PITCH, 0.38)
+	# 4. Lift vertically straight UP back to high clearance before swiveling!
+	# Prevents the gripper and fingers from dragging horizontally through the tray walls or divider!
+	tween.tween_interval(0.08)
+	tween.tween_property(shoulder, "rotation:x", ik_staging.shoulder_pitch, 0.28)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_staging.elbow_pitch, 0.28)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_staging.wrist_pitch, 0.28)
+
+	# 5. Now safely high above the tray, swivel arm back to front and fold to rest pose
+	tween.tween_property(arm, "rotation:y", REST_ARM_YAW, 0.35)
+	tween.parallel().tween_property(shoulder, "rotation:x", REST_SHOULDER_PITCH, 0.35)
+	tween.parallel().tween_property(elbow, "rotation:x", REST_ELBOW_PITCH, 0.35)
+	tween.parallel().tween_property(wrist, "rotation:x", REST_WRIST_PITCH, 0.35)
 	if finger_left: tween.parallel().tween_property(finger_left, "position:x", -REST_FINGER_SPAN, 0.30)
 	if finger_right: tween.parallel().tween_property(finger_right, "position:x", REST_FINGER_SPAN, 0.30)
 
@@ -510,7 +558,7 @@ func execute_dynamic_place() -> void:
 	# Place directly onto floor in front of chassis
 	var forward_dir: Vector3 = -global_transform.basis.z
 	var place_floor_world: Vector3 = global_position + forward_dir * 0.95 + Vector3(0.0, 0.16, 0.0)
-	var staging_world: Vector3 = place_floor_world + Vector3(0.0, 0.25, 0.0)
+	var staging_world: Vector3 = place_floor_world + Vector3(0.0, 0.35, 0.0)
 
 	var ik_staging = ArmIKSolver.solve_local(arm.to_local(staging_world))
 	var ik_place = ArmIKSolver.solve_local(arm.to_local(place_floor_world))
@@ -552,8 +600,13 @@ func execute_dynamic_place() -> void:
 			SoundManager.play_spatial(self, SoundManager.sfx_box_stow, 0.0)
 	)
 
-	# 4. Fold home to compact rest pose
-	tween.tween_interval(0.10)
+	# 4. Lift vertically back up above placed box before folding!
+	tween.tween_interval(0.08)
+	tween.tween_property(shoulder, "rotation:x", ik_staging.shoulder_pitch, 0.28)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_staging.elbow_pitch, 0.28)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_staging.wrist_pitch, 0.28)
+
+	# 5. Fold home to compact rest pose
 	tween.tween_property(arm, "rotation:y", REST_ARM_YAW, 0.35)
 	tween.parallel().tween_property(shoulder, "rotation:x", REST_SHOULDER_PITCH, 0.35)
 	tween.parallel().tween_property(elbow, "rotation:x", REST_ELBOW_PITCH, 0.35)
@@ -568,6 +621,173 @@ func execute_dynamic_place() -> void:
 		_arm_status_text = "Box Placed! [WASD] Drive | Click/E: Pick"
 		_update_dev_status_label()
 	)
+
+func execute_dynamic_unstow_and_place(target_deck_world: Vector3) -> bool:
+	if _is_arm_tweening:
+		return false
+
+	# Locate box in cargo tray or in gripped socket
+	var box_to_place: ToteBox = null
+	if held_box != null:
+		box_to_place = held_box
+	elif cargo_tray:
+		for child in cargo_tray.get_children():
+			if child is ToteBox:
+				box_to_place = child
+				break
+
+	if not box_to_place or not is_instance_valid(box_to_place):
+		print("[UNSTOW REJECTED] box_to_place is null or invalid! tray_children=%d" % (cargo_tray.get_child_count() if cargo_tray else 0))
+		SoundManager.play_spatial(self, SoundManager.sfx_cancel, -2.0)
+		return false
+
+	_is_arm_tweening = true
+	arm_motion_state = ArmMotionState.PLACING
+	set_amr_state(AmrState.LIFTING)
+
+	# High clearance staging waypoint above conveyor deck (+0.28m)
+	var deck_staging_world = target_deck_world + Vector3(0.0, 0.28, 0.0)
+	var ik_deck_staging = ArmIKSolver.solve_local(arm.to_local(deck_staging_world))
+	var ik_deck_place = ArmIKSolver.solve_local(arm.to_local(target_deck_world))
+
+	if not ik_deck_place.success or not ik_deck_staging.success:
+		print("[UNSTOW REJECTED] ik_deck_place=%s ik_deck_staging=%s err=%s target=%s" % [
+			str(ik_deck_place.success), str(ik_deck_staging.success), ik_deck_place.error_message, str(target_deck_world)
+		])
+		_is_arm_tweening = false
+		arm_motion_state = ArmMotionState.STATIONARY
+		set_amr_state(AmrState.IDLE)
+		SoundManager.play_spatial(self, SoundManager.sfx_cancel, -2.0)
+		_arm_status_text = "⚠️ Kinematic Reach Exception at Conveyor"
+		_update_dev_status_label()
+		return false
+
+	_arm_status_text = "Unstowing & Placing box on conveyor..."
+	_update_dev_status_label()
+
+	var tween: Tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_current_arm_tween = tween
+	if arm_tween_speed_scale != 1.0:
+		tween.set_speed_scale(arm_tween_speed_scale)
+
+	# If box is already held in socket, skip tray re-grasp and proceed directly to deck placement
+	if held_box == null:
+		var slot_world = box_to_place.global_position
+		var slot_staging_world = slot_world + Vector3(0.0, 0.52, 0.0)
+		var ik_tray_staging = ArmIKSolver.solve_local(arm.to_local(slot_staging_world))
+		var ik_tray_grip = ArmIKSolver.solve_local(arm.to_local(slot_world))
+
+		# 1. Open fingers & swivel 180 degrees backward over tray slot
+		tween.tween_property(arm, "rotation:y", ik_tray_staging.base_yaw, 0.40)
+		tween.parallel().tween_property(shoulder, "rotation:x", ik_tray_staging.shoulder_pitch, 0.40)
+		tween.parallel().tween_property(elbow, "rotation:x", ik_tray_staging.elbow_pitch, 0.40)
+		tween.parallel().tween_property(wrist, "rotation:x", ik_tray_staging.wrist_pitch, 0.40)
+		if finger_left: tween.parallel().tween_property(finger_left, "position:x", -0.34, 0.30)
+		if finger_right: tween.parallel().tween_property(finger_right, "position:x", 0.34, 0.30)
+
+		# 2. Lower fingers onto box in tray
+		tween.tween_property(shoulder, "rotation:x", ik_tray_grip.shoulder_pitch, 0.25)
+		tween.parallel().tween_property(elbow, "rotation:x", ik_tray_grip.elbow_pitch, 0.25)
+		tween.parallel().tween_property(wrist, "rotation:x", ik_tray_grip.wrist_pitch, 0.25)
+
+		# 3. Clamp fingers & socket box
+		if finger_left: tween.tween_property(finger_left, "position:x", -0.29, 0.18)
+		if finger_right: tween.parallel().tween_property(finger_right, "position:x", 0.29, 0.18)
+
+		tween.tween_callback(func():
+			if is_instance_valid(box_to_place):
+				held_box = box_to_place
+				held_box.freeze = true
+				if held_box.get_parent():
+					held_box.get_parent().remove_child(held_box)
+				gripped_socket.add_child(held_box)
+				held_box.transform = Transform3D.IDENTITY
+				held_box.collision_mask = 0 # Isolate collision while gripped in arm
+				add_collision_exception_with(held_box)
+				held_box.add_collision_exception_with(self)
+				if tray_body:
+					held_box.add_collision_exception_with(tray_body)
+					tray_body.add_collision_exception_with(held_box)
+				SoundManager.play_spatial(self, SoundManager.sfx_box_pick, +1.0)
+		)
+
+		# 4. Lift vertically back up above tray rails
+		tween.tween_interval(0.05)
+		tween.tween_property(shoulder, "rotation:x", ik_tray_staging.shoulder_pitch, 0.25)
+		tween.parallel().tween_property(elbow, "rotation:x", ik_tray_staging.elbow_pitch, 0.25)
+		tween.parallel().tween_property(wrist, "rotation:x", ik_tray_staging.wrist_pitch, 0.25)
+
+	# 5. Swivel forward 180 degrees to conveyor deck staging waypoint
+	tween.tween_property(arm, "rotation:y", ik_deck_staging.base_yaw, 0.45)
+	tween.parallel().tween_property(shoulder, "rotation:x", ik_deck_staging.shoulder_pitch, 0.45)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_deck_staging.elbow_pitch, 0.45)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_deck_staging.wrist_pitch, 0.45)
+
+	# 6. Lower cleanly flush onto conveyor deck
+	tween.tween_property(shoulder, "rotation:x", ik_deck_place.shoulder_pitch, 0.28)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_deck_place.elbow_pitch, 0.28)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_deck_place.wrist_pitch, 0.28)
+
+	# 7. Open fingers & release payload onto conveyor table
+	if finger_left: tween.tween_property(finger_left, "position:x", -0.34, 0.18)
+	if finger_right: tween.parallel().tween_property(finger_right, "position:x", 0.34, 0.18)
+
+	var placed_box_ref: ToteBox = null
+	tween.tween_callback(func():
+		if is_instance_valid(held_box):
+			placed_box_ref = held_box
+			var final_world_tform: Transform3D = held_box.global_transform
+			# Soft placement clearance: deck top is 0.61m + 0.16m half-height = 0.770m flush center.
+			# Clamping y >= 0.776m gives 6mm safety margin so it settles gently under gravity without penetration impulse.
+			final_world_tform.origin.y = max(final_world_tform.origin.y, 0.776)
+			held_box.get_parent().remove_child(held_box)
+			_get_world_root().add_child(held_box)
+			held_box.global_transform = final_world_tform
+			# Enable active live dynamics so the motorized conveyor belt transports it
+			held_box.freeze = false
+			held_box.can_sleep = false
+			held_box.sleeping = false
+			held_box.collision_layer = 8
+			held_box.collision_mask = 63
+			held_box.linear_velocity = Vector3(0.0, -0.1, 0.0)
+			held_box.angular_velocity = Vector3.ZERO
+			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, Vector3(0.0, -0.1, 0.0))
+
+			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_ANGULAR_VELOCITY, Vector3.ZERO)
+			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, final_world_tform)
+			held_box = null
+			SoundManager.play_spatial(self, SoundManager.sfx_box_stow, +1.0)
+	)
+
+	# 8. Lift vertically back up above placed box
+	tween.tween_interval(0.06)
+	tween.tween_property(shoulder, "rotation:x", ik_deck_staging.shoulder_pitch, 0.25)
+	tween.parallel().tween_property(elbow, "rotation:x", ik_deck_staging.elbow_pitch, 0.25)
+	tween.parallel().tween_property(wrist, "rotation:x", ik_deck_staging.wrist_pitch, 0.25)
+
+	# 9. Fold arm home to compact rest pose
+	tween.tween_property(arm, "rotation:y", REST_ARM_YAW, 0.35)
+	tween.parallel().tween_property(shoulder, "rotation:x", REST_SHOULDER_PITCH, 0.35)
+	tween.parallel().tween_property(elbow, "rotation:x", REST_ELBOW_PITCH, 0.35)
+	tween.parallel().tween_property(wrist, "rotation:x", REST_WRIST_PITCH, 0.35)
+	if finger_left: tween.parallel().tween_property(finger_left, "position:x", -REST_FINGER_SPAN, 0.30)
+	if finger_right: tween.parallel().tween_property(finger_right, "position:x", REST_FINGER_SPAN, 0.30)
+
+	tween.finished.connect(func():
+		_is_arm_tweening = false
+		arm_motion_state = ArmMotionState.STATIONARY
+		set_amr_state(AmrState.IDLE)
+		# Defer collision exception cleanup until arm is safely folded back home
+		if is_instance_valid(placed_box_ref):
+			remove_collision_exception_with(placed_box_ref)
+			placed_box_ref.remove_collision_exception_with(self)
+			if tray_body:
+				placed_box_ref.remove_collision_exception_with(tray_body)
+				tray_body.remove_collision_exception_with(placed_box_ref)
+		_arm_status_text = "📦 Box Placed on Conveyor! Mission Complete"
+		_update_dev_status_label()
+	)
+	return true
 
 func _fold_arm_to_home_instant() -> void:
 	if arm: arm.rotation.y = REST_ARM_YAW
@@ -587,6 +807,7 @@ func _physics_process(delta: float) -> void:
 			velocity.y -= 9.81 * delta
 			move_and_slide()
 
+	_check_and_resolve_arm_collisions(delta)
 	_update_inactive_arm_animation(delta)
 	_update_stowed_cargo_dynamics(delta)
 
@@ -653,6 +874,108 @@ func _process_rl_driving(delta: float) -> void:
 	else:
 		velocity.y = 0.0
 	move_and_slide()
+
+	# Dynamic impact physics with RigidBody3D obstacles in RL mode
+	for i in range(get_slide_collision_count()):
+		var col: KinematicCollision3D = get_slide_collision(i)
+		var collider = col.get_collider()
+		if collider is RigidBody3D:
+			var impact_speed: float = abs(_manual_linear_vel)
+			var impulse_dir: Vector3 = -col.get_normal()
+			var contact_offset: Vector3 = col.get_position() - collider.global_position
+
+			if collider is ToteBox:
+				var impulse_mag: float = impact_speed * 140.0 + 40.0
+				collider.apply_impulse(impulse_dir * impulse_mag * delta, contact_offset)
+			elif collider is ShelfPod:
+				var impulse_mag: float = impact_speed * 2000.0 + 400.0
+				collider.apply_impulse(impulse_dir * impulse_mag * delta, contact_offset)
+
+## Active Continuous Collision Detection & Contact Resolution for Robotic Arm
+func _check_and_resolve_arm_collisions(_delta: float) -> void:
+	if not is_inside_tree():
+		return
+	var space_state: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
+	if not space_state:
+		return
+
+	var arm_parts: Array[Dictionary] = [
+		{"node": shoulder, "body": boom_body, "size": Vector3(0.14, 1.02, 0.16), "offset": Vector3(0, 0.51, 0)},
+		{"node": elbow, "body": forearm_body, "size": Vector3(0.12, 0.86, 0.14), "offset": Vector3(0, 0.43, 0)},
+		{"node": wrist, "body": gripper_body, "size": Vector3(0.28, 0.08, 0.14), "offset": Vector3(0, 0.04, 0)},
+		{"node": finger_left, "body": finger_left_body, "size": Vector3(0.04, 0.26, 0.14), "offset": Vector3(0, 0.13, 0)},
+		{"node": finger_right, "body": finger_right_body, "size": Vector3(0.04, 0.26, 0.14), "offset": Vector3(0, 0.13, 0)}
+	]
+
+	var self_rids: Array[RID] = [get_rid()]
+	if tray_body: self_rids.append(tray_body.get_rid())
+	if arm_base_body: self_rids.append(arm_base_body.get_rid())
+	for part in arm_parts:
+		if part["body"]:
+			self_rids.append(part["body"].get_rid())
+	if held_box and is_instance_valid(held_box):
+		self_rids.append(held_box.get_rid())
+	if cargo_tray:
+		for child in cargo_tray.get_children():
+			if child is CollisionObject3D:
+				self_rids.append(child.get_rid())
+
+	var forward_dir: Vector3 = -global_transform.basis.z
+
+	for part in arm_parts:
+		var joint_node: Node3D = part["node"]
+		var body_node: AnimatableBody3D = part["body"]
+		if not joint_node:
+			continue
+
+		var query_tf = joint_node.global_transform.translated_local(part["offset"])
+		if body_node:
+			body_node.global_transform = joint_node.global_transform
+
+		var shape = BoxShape3D.new()
+		shape.size = part["size"]
+
+		var query = PhysicsShapeQueryParameters3D.new()
+		query.shape_rid = shape.get_rid()
+		# Collides with: ShelfPod (2), ToteBoxes (8), CargoTray (32)
+		query.collision_mask = 2 | 8 | 32
+		query.exclude = self_rids
+		query.transform = query_tf
+
+		var hits = space_state.intersect_shape(query, 6)
+		for hit in hits:
+			var collider = hit.collider
+			if not is_instance_valid(collider) or collider == self or collider in self_rids:
+				continue
+			if collider.name == "ArenaFloor":
+				continue
+
+			var shape_idx = hit.get("shape", -1)
+			last_arm_hit = "%s (shape %d) on %s at %s" % [collider.name, shape_idx, body_node.name if body_node else "arm", str(query_tf.origin)]
+
+			# 1. Physics impulse transfer if hitting dynamic RigidBody3D (ToteBox or ShelfPod)
+			if collider is RigidBody3D:
+				var impact_speed: float = maxf(abs(_manual_linear_vel), 0.75)
+				var contact_dir: Vector3 = (collider.global_position - query_tf.origin).normalized()
+				if contact_dir.length_squared() < 0.01:
+					contact_dir = forward_dir
+
+				if collider is ToteBox and collider != held_box:
+					var push_impulse: Vector3 = contact_dir * (collider.mass * (impact_speed * 1.5 + 0.4))
+					collider.apply_central_impulse(push_impulse)
+					collider.sleeping = false
+				elif collider is ShelfPod:
+					var push_impulse: Vector3 = contact_dir * (collider.mass * 0.06 * impact_speed)
+					collider.apply_central_impulse(push_impulse)
+					collider.sleeping = false
+
+			# 2. Block AMR forward driving if arm is contacting obstacle ahead
+			var arm_rel_fwd = forward_dir.dot(query_tf.origin - global_position)
+			if arm_rel_fwd > 0.1:
+				if _manual_linear_vel > 0.0:
+					_manual_linear_vel = 0.0
+					velocity.x = 0.0
+					velocity.z = 0.0
 
 ## Dynamic Idle Breathing and Suspension Compliance for Inactive Resting Arm
 func _update_inactive_arm_animation(delta: float) -> void:
@@ -807,7 +1130,11 @@ func _process_manual_driving(delta: float) -> void:
 
 func _update_dev_status_label() -> void:
 	if label_status:
-		label_status.text = "%s [DEV BOT]\n⚡ %.0f%% | %.1f m/s\n%s\nTray: %d/2 box(es)" % [
+		if is_rl_control or not is_manual_control:
+			label_status.visible = false
+			return
+		label_status.visible = true
+		label_status.text = "%s [DEV BOT]\n⚡ %.0f%% | %.1f m/s\n%s\nTray: %d/2" % [
 			robot_id,
 			battery_level,
 			current_speed,
@@ -922,6 +1249,19 @@ func reset_robot(spawn_pos: Vector3, spawn_rot_y: float = 0.0) -> void:
 	_rl_target_v_ang = 0.0
 	is_manual_control = false
 	is_rl_control = true
+	last_arm_hit = ""
+
+	# Kill any running arm tween
+	if _current_arm_tween and _current_arm_tween.is_valid():
+		_current_arm_tween.kill()
+		_current_arm_tween = null
+
+	# Clear collision exceptions with all tote boxes
+	var all_boxes = get_tree().get_nodes_in_group("tote_boxes")
+	for b in all_boxes:
+		if b is CollisionObject3D:
+			remove_collision_exception_with(b)
+			b.remove_collision_exception_with(self)
 
 	# Release any gripped box
 	if held_box and is_instance_valid(held_box):
@@ -931,13 +1271,13 @@ func reset_robot(spawn_pos: Vector3, spawn_rot_y: float = 0.0) -> void:
 		held_box.freeze = false
 	held_box = null
 
-	# Unparent any stowed boxes back to world root
-	for slot_idx in [0, 1]:
-		var s_box = get_slot_box(slot_idx)
-		if s_box and is_instance_valid(s_box) and s_box.get_parent() == cargo_tray:
-			cargo_tray.remove_child(s_box)
-			_get_world_root().add_child(s_box)
-			s_box.freeze = false
+	# Unparent all stowed boxes in cargo tray back to world root
+	if cargo_tray:
+		for child in cargo_tray.get_children():
+			if child is ToteBox:
+				cargo_tray.remove_child(child)
+				_get_world_root().add_child(child)
+				child.freeze = false
 
 	active_target_box = null
 

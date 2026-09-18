@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Base Gymnasium environment wrapper for Godot 4 RL training scenes."""
+"""Gymnasium environment wrapper for Stage R4: Full Rack Cycle (Rack Pick & Conveyor Dropoff)."""
 
 from __future__ import annotations
 
@@ -15,33 +15,38 @@ except ImportError:
     from gym import spaces  # type: ignore
 
 from src.envs.godot_env_bridge import GodotEnvBridge
+from src.utils.config_loader import get_clock_config
 
 
-class GodotGymEnv(gym.Env):
-    """Gymnasium environment wrapping a headless Godot 4 training scene."""
+class RackCycleGymEnv(gym.Env):
+    """Gymnasium environment wrapping Godot 4 Stage R4 Rack Cycle scene."""
 
     metadata = {"render_modes": ["headless"]}
 
     def __init__(
         self,
-        scene_path: str,
-        port: int = 11000,
+        scene_path: str = "res://scenes/training/training_rack_cycle.tscn",
+        port: int = 11104,
         ticks_per_step: int = 4,
-        physics_hz: int = 200,
-        action_hz: int = 60,
+        physics_hz: Optional[int] = None,
+        action_hz: Optional[int] = None,
         headless: bool = True,
         autostart: bool = True,
+        fixed_fps: Optional[int] = None,
     ) -> None:
         super().__init__()
+        clock_cfg = get_clock_config()
+        self.physics_hz = physics_hz if physics_hz is not None else int(clock_cfg.get("physics_fps", 200))
+        self.action_hz = action_hz if action_hz is not None else int(clock_cfg.get("action_fps", 60))
+        self.fixed_fps = fixed_fps if fixed_fps is not None else self.physics_hz
+
         self.scene_path = scene_path
         self.port = port
         self.ticks_per_step = ticks_per_step
-        self.physics_hz = physics_hz
-        self.action_hz = action_hz
         self.headless = headless
         self.autostart = autostart
 
-        # Action Space: [v_lin, v_ang, lift_trigger]
+        # Action Space: [v_lin, v_ang, trigger]
         self.action_space = spaces.Box(
             low=-1.0,
             high=1.0,
@@ -49,11 +54,11 @@ class GodotGymEnv(gym.Env):
             dtype=np.float32,
         )
 
-        # Observation Space: 13 normalized floats
+        # Observation Space: 32 normalized floats (16 kinematic/task features + 16-ray LiDAR)
         self.observation_space = spaces.Box(
             low=-1.0,
             high=1.0,
-            shape=(13,),
+            shape=(32,),
             dtype=np.float32,
         )
 
@@ -82,16 +87,31 @@ class GodotGymEnv(gym.Env):
         super().reset(seed=seed)
         self._init_bridge()
 
-        seed_val = seed if seed is not None else int(np.random.randint(0, 1000000))
-        difficulty = float(options.get("difficulty", 0.0)) if options else 0.0
+        seed_val = seed if seed is not None else 0
+        difficulty = 0.0
+        full_tray = False
+        multi_box = False
+        extra_kwargs: Dict[str, Any] = {}
+        if options:
+            difficulty = float(options.get("difficulty", 0.0))
+            full_tray = bool(options.get("full_tray", False))
+            multi_box = bool(options.get("multi_box", False))
+            for k, v in options.items():
+                if k not in ["difficulty", "full_tray", "multi_box"]:
+                    extra_kwargs[k] = v
 
         assert self.bridge is not None
-        raw_obs, info = self.bridge.reset(seed=seed_val, difficulty=difficulty)
+        raw_obs, info = self.bridge.reset(
+            seed=seed_val,
+            difficulty=difficulty,
+            full_tray=full_tray,
+            multi_box=multi_box,
+            **extra_kwargs,
+        )
 
         obs = np.array(raw_obs, dtype=np.float32)
-        expected_shape = self.observation_space.shape
-        if obs.shape != expected_shape:
-            padded = np.zeros(expected_shape, dtype=np.float32)
+        if obs.shape != self.observation_space.shape:
+            padded = np.zeros(self.observation_space.shape, dtype=np.float32)
             n = min(len(padded), len(obs))
             padded[:n] = obs[:n]
             obs = padded
@@ -104,14 +124,13 @@ class GodotGymEnv(gym.Env):
         raw_obs, reward, terminated, truncated, info = self.bridge.step(act_list)
 
         obs = np.array(raw_obs, dtype=np.float32)
-        expected_shape = self.observation_space.shape
-        if obs.shape != expected_shape:
-            padded = np.zeros(expected_shape, dtype=np.float32)
+        if obs.shape != self.observation_space.shape:
+            padded = np.zeros(self.observation_space.shape, dtype=np.float32)
             n = min(len(padded), len(obs))
             padded[:n] = obs[:n]
             obs = padded
 
-        return obs, float(reward), terminated, truncated, info
+        return obs, reward, terminated, truncated, info
 
     def close(self) -> None:
         if self.bridge:

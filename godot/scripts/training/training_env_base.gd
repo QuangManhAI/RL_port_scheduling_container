@@ -8,7 +8,9 @@ extends Node3D
 
 signal episode_ended(terminated: bool, truncated: bool)
 
-@export var ticks_per_step: int = 4
+@export var physics_hz: int = 200  ## Simulation clock: 200 FPS high-fidelity physics
+@export var action_hz: int = 60    ## Action decision clock: 60 FPS
+@export var ticks_per_step: int = 4 ## Legacy fallback ticks parameter
 @export var max_episode_steps: int = 600
 @export var default_port: int = 11000
 
@@ -17,8 +19,10 @@ var client: StreamPeerTCP
 var active_port: int = 11000
 var step_count: int = 0
 var current_difficulty: float = 0.0
+var last_reset_msg: Dictionary = {}
 var is_client_connected: bool = false
 var _is_processing_step: bool = false
+var _action_tick_accumulator: float = 0.0
 
 @onready var amr: AmrRobot = get_node_or_null("AMR_Robot")
 
@@ -27,10 +31,21 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 	_parse_cmdline_args()
+	Engine.physics_ticks_per_second = physics_hz
 	_start_tcp_server()
 
-	# Pause scene physics initially until Python connects and issues reset()
-	get_tree().paused = true
+	# Determine if running in standalone/editor interactive mode or headless RL training
+	var is_headless: bool = DisplayServer.get_name() == "headless" or OS.has_feature("dedicated_server")
+	var has_human_amr: bool = has_node("HumanControlAMR") or get_tree().get_nodes_in_group("human_amr").size() > 0 or (amr != null and amr.is_manual_control)
+
+	if is_headless and not has_human_amr:
+		# Headless RL training: pause scene physics initially until Python connects and issues reset()
+		get_tree().paused = true
+	else:
+		# Interactive/human testing: keep physics unpaused so player can drive and test physics immediately
+		get_tree().paused = false
+		print("[TrainingEnvBase] Interactive mode active — Physics UNPAUSED for real-time testing.")
+
 
 func _parse_cmdline_args() -> void:
 	active_port = default_port
@@ -40,6 +55,10 @@ func _parse_cmdline_args() -> void:
 	for arg in args:
 		if arg.begins_with("--port="):
 			active_port = int(arg.replace("--port=", ""))
+		elif arg.begins_with("--physics_hz="):
+			physics_hz = int(arg.replace("--physics_hz=", ""))
+		elif arg.begins_with("--action_hz="):
+			action_hz = int(arg.replace("--action_hz=", ""))
 		elif arg.begins_with("--ticks="):
 			ticks_per_step = int(arg.replace("--ticks=", ""))
 		elif arg.begins_with("--max_steps="):
@@ -72,7 +91,9 @@ func _process(_delta: float) -> void:
 			print("[TrainingEnvBase] Python client disconnected from port %d" % active_port)
 			is_client_connected = false
 			client = null
-			get_tree().paused = true
+			var is_headless_disc: bool = DisplayServer.get_name() == "headless" or OS.has_feature("dedicated_server")
+			var has_human_disc: bool = has_node("HumanControlAMR") or get_tree().get_nodes_in_group("human_amr").size() > 0 or (amr != null and amr.is_manual_control)
+			get_tree().paused = (is_headless_disc and not has_human_disc)
 		return
 
 	if _is_processing_step:
@@ -117,9 +138,22 @@ func _handle_client_message(msg: Dictionary) -> void:
 	match cmd:
 		"reset":
 			_is_processing_step = true
+			last_reset_msg = msg
 			var seed_val: int = int(msg.get("seed", 0))
 			current_difficulty = float(msg.get("difficulty", 0.0))
 			step_count = 0
+			_action_tick_accumulator = 0.0
+
+			# Dynamic dual-clock synchronization from Python configs/config.yaml
+			if msg.has("physics_hz"):
+				var new_phz: int = int(msg["physics_hz"])
+				if new_phz > 0 and new_phz != physics_hz:
+					physics_hz = new_phz
+					Engine.physics_ticks_per_second = physics_hz
+			if msg.has("action_hz"):
+				var new_ahz: int = int(msg["action_hz"])
+				if new_ahz > 0:
+					action_hz = new_ahz
 
 			# Execute reset
 			_on_arena_reset(seed_val, current_difficulty)
@@ -146,9 +180,17 @@ func _handle_client_message(msg: Dictionary) -> void:
 			# 1. Apply action
 			_apply_action(action)
 
-			# 2. Advance physics for exactly ticks_per_step frames
+			# 2. Advance physics for simulated action interval (physics_hz / action_hz ticks)
+			# At 200 Hz physics and 60 Hz action, this averages 3.3333 ticks per step.
+			# Fractional accumulator guarantees exact 200 physics ticks per 60 action steps (zero drift).
+			_action_tick_accumulator += float(physics_hz) / float(max(1, action_hz))
+			var ticks_to_advance: int = int(_action_tick_accumulator)
+			_action_tick_accumulator -= float(ticks_to_advance)
+			if ticks_to_advance < 1:
+				ticks_to_advance = 1
+
 			get_tree().paused = false
-			for i in range(ticks_per_step):
+			for i in range(ticks_to_advance):
 				await get_tree().physics_frame
 			get_tree().paused = true
 

@@ -21,6 +21,27 @@ func _ready() -> void:
 	var p = get_parent()
 	if p is TrainingEnvBase:
 		env_node = p
+		var s_name: String = p.name
+		if s_name == "TrainingRackCycle":
+			title_label.text = "STAGE R4: FULL RACK CYCLE (PICK & CONVEYOR DROPOFF)"
+		elif s_name == "TrainingRackPick":
+			title_label.text = "STAGE R3: RACK BOX PICK & STOW (RL TRAINING)"
+		elif s_name == "TrainingRackTargeting":
+			title_label.text = "STAGE R2: TIER TARGETING & DOCKING (RL TRAINING)"
+		elif s_name == "TrainingRackDocking":
+			title_label.text = "STAGE R1: RACK DOCKING (RL TRAINING)"
+		elif s_name == "TrainingNavigateToItem":
+			title_label.text = "STAGE S1: NAVIGATE TO ITEM (RL TRAINING)"
+		elif s_name == "TrainingPickup":
+			title_label.text = "STAGE S2: TOTE PICKUP (RL TRAINING)"
+		elif s_name == "TrainingDropoff":
+			title_label.text = "STAGE S3: TOTE DROPOFF (RL TRAINING)"
+		elif s_name == "TrainingNavigateCarrying":
+			title_label.text = "STAGE S4: NAVIGATE CARRYING (RL TRAINING)"
+		elif s_name == "TrainingChainedCycle":
+			title_label.text = "STAGE S5: CHAINED PICK-AND-PLACE (RL TRAINING)"
+		elif s_name == "TrainingMultiAgent":
+			title_label.text = "STAGE S6: MULTI-AGENT COORDINATION (RL TRAINING)"
 	banner_label.visible = false
 
 func _process(delta: float) -> void:
@@ -28,11 +49,14 @@ func _process(delta: float) -> void:
 		return
 
 	# Status line
-	if env_node.is_client_connected:
+	if "native_ai_mode" in env_node and env_node.native_ai_mode:
+		status_label.text = "● Zero-Latency Native In-Engine AI ACTIVE | [N] Toggle AI | [R] Reset | [1-3] Speed | [P/Space] Pause"
+		status_label.modulate = Color(0.1, 0.95, 1.0, 1.0)
+	elif env_node.is_client_connected:
 		status_label.text = "● RL Client Connected (Port %d) | Deterministic Lockstep Active" % env_node.active_port
 		status_label.modulate = Color(0.2, 0.9, 0.3, 1.0)
 	else:
-		status_label.text = "○ TCP Server Listening on 127.0.0.1:%d | Waiting for Python..." % env_node.active_port
+		status_label.text = "○ TCP Server Listening on 127.0.0.1:%d | Press [N] to Run Native AI Standalone" % env_node.active_port
 		status_label.modulate = Color(0.9, 0.7, 0.2, 1.0)
 
 	# Telemetry

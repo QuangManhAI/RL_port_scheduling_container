@@ -1,0 +1,183 @@
+[gd_scene format=3 uid="uid://bqfewqn5gteaa"]
+
+[ext_resource type="Script" uid="uid://ch8g2nfrmd4c" path="res://scripts/training/fleet/fleet_aisle_env.gd" id="1_env"]
+[ext_resource type="PackedScene" uid="uid://dmx3amr002" path="res://scenes/entities/amr_robot.tscn" id="2_amr"]
+[ext_resource type="PackedScene" uid="uid://dmx3shelf003" path="res://scenes/environment/shelf_pod.tscn" id="3_rack"]
+[ext_resource type="PackedScene" uid="uid://cvalk6p0b3m1u" path="res://scenes/environment/tote_box.tscn" id="4_box"]
+[ext_resource type="Script" uid="uid://b6ke6y6k4ocfx" path="res://scripts/training/training_camera.gd" id="5_cam"]
+[ext_resource type="PackedScene" path="res://scenes/training/training_hud.tscn" id="6_hud"]
+[ext_resource type="PackedScene" uid="uid://dpkgwxstqwfg" path="res://scenes/environment/conveyor_table.tscn" id="7_table"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_fleet"]
+sky_top_color = Color(0.35, 0.55, 0.9, 1)
+sky_horizon_color = Color(0.7, 0.78, 0.86, 1)
+ground_bottom_color = Color(0.65, 0.7, 0.75, 1)
+
+[sub_resource type="Sky" id="Sky_fleet"]
+sky_material = SubResource("ProceduralSkyMaterial_fleet")
+
+[sub_resource type="Environment" id="Environment_fleet"]
+background_mode = 2
+sky = SubResource("Sky_fleet")
+ambient_light_source = 2
+ambient_light_color = Color(0.85, 0.88, 0.92, 1)
+ambient_light_energy = 0.7
+tonemap_mode = 2
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
+size = Vector3(20, 0.4, 16)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
+albedo_color = Color(0.14, 0.16, 0.2, 1)
+roughness = 0.75
+
+[sub_resource type="BoxMesh" id="BoxMesh_floor"]
+material = SubResource("StandardMaterial3D_floor")
+size = Vector3(20, 0.4, 16)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ns"]
+size = Vector3(20, 1.2, 0.4)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wall"]
+albedo_color = Color(0.24, 0.27, 0.32, 1)
+roughness = 0.85
+
+[sub_resource type="BoxMesh" id="BoxMesh_wall_ns"]
+material = SubResource("StandardMaterial3D_wall")
+size = Vector3(20, 1.2, 0.4)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ew"]
+size = Vector3(0.4, 1.2, 16)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wall_ew"]
+material = SubResource("StandardMaterial3D_wall")
+size = Vector3(0.4, 1.2, 16)
+
+[node name="TrainingFleetAisle" type="Node3D" unique_id=23114917]
+script = ExtResource("1_env")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1915844278]
+environment = SubResource("Environment_fleet")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=272408927]
+transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 10, 16, 10)
+light_energy = 0.95
+shadow_enabled = true
+shadow_blur = 1.5
+
+[node name="ArenaFloor" type="StaticBody3D" parent="." unique_id=1924037934]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.2, 0)
+collision_mask = 15
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ArenaFloor" unique_id=1992435108]
+shape = SubResource("BoxShape3D_floor")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="ArenaFloor" unique_id=930442440]
+mesh = SubResource("BoxMesh_floor")
+
+[node name="ArenaWalls" type="StaticBody3D" parent="." unique_id=444105720]
+collision_mask = 15
+
+[node name="WallNorth" type="CollisionShape3D" parent="ArenaWalls" unique_id=1956086398]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, -8)
+shape = SubResource("BoxShape3D_wall_ns")
+
+[node name="MeshNorth" type="MeshInstance3D" parent="ArenaWalls/WallNorth" unique_id=1397453808]
+mesh = SubResource("BoxMesh_wall_ns")
+
+[node name="WallSouth" type="CollisionShape3D" parent="ArenaWalls" unique_id=1884565870]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 8)
+shape = SubResource("BoxShape3D_wall_ns")
+
+[node name="MeshSouth" type="MeshInstance3D" parent="ArenaWalls/WallSouth" unique_id=586059572]
+mesh = SubResource("BoxMesh_wall_ns")
+
+[node name="WallEast" type="CollisionShape3D" parent="ArenaWalls" unique_id=602997863]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0.6, 0)
+shape = SubResource("BoxShape3D_wall_ew")
+
+[node name="MeshEast" type="MeshInstance3D" parent="ArenaWalls/WallEast" unique_id=1225458845]
+mesh = SubResource("BoxMesh_wall_ew")
+
+[node name="WallWest" type="CollisionShape3D" parent="ArenaWalls" unique_id=192940141]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10, 0.6, 0)
+shape = SubResource("BoxShape3D_wall_ew")
+
+[node name="MeshWest" type="MeshInstance3D" parent="ArenaWalls/WallWest" unique_id=1330351945]
+mesh = SubResource("BoxMesh_wall_ew")
+
+[node name="RackNorth" parent="." unique_id=492460863 instance=ExtResource("3_rack")]
+transform = Transform3D(-1, 0, 8.74228e-08, 0, 1, 0, -8.74228e-08, 0, -1, 0, 0.02, -4)
+
+[node name="RackNorthBoxes" type="Node3D" parent="." unique_id=846535894]
+
+[node name="Box_N_T1_L" parent="RackNorthBoxes" unique_id=1571651839 instance=ExtResource("4_box")]
+transform = Transform3D(-1, 0, 8.74228e-08, 0, 1, 0, -8.74228e-08, 0, -1, 0.36, 0.56, -3.4)
+
+[node name="Box_N_T1_R" parent="RackNorthBoxes" unique_id=466980838 instance=ExtResource("4_box")]
+transform = Transform3D(-1, 0, 8.74228e-08, 0, 1, 0, -8.74228e-08, 0, -1, -0.36, 0.56, -3.4)
+
+[node name="Box_N_T2_L" parent="RackNorthBoxes" unique_id=141137799 instance=ExtResource("4_box")]
+transform = Transform3D(-1, 0, 8.74228e-08, 0, 1, 0, -8.74228e-08, 0, -1, 0.36, 1.11, -3.4)
+
+[node name="Box_N_T2_R" parent="RackNorthBoxes" unique_id=1209640773 instance=ExtResource("4_box")]
+transform = Transform3D(-1, 0, 8.74228e-08, 0, 1, 0, -8.74228e-08, 0, -1, -0.36, 1.11, -3.4)
+
+[node name="Box_N_T3_L" parent="RackNorthBoxes" unique_id=2058129092 instance=ExtResource("4_box")]
+transform = Transform3D(-1, 0, 8.74228e-08, 0, 1, 0, -8.74228e-08, 0, -1, 0.36, 1.67, -3.4)
+
+[node name="Box_N_T3_R" parent="RackNorthBoxes" unique_id=272796076 instance=ExtResource("4_box")]
+transform = Transform3D(-1, 0, 8.74228e-08, 0, 1, 0, -8.74228e-08, 0, -1, -0.36, 1.67, -3.4)
+
+[node name="Box_N_T4_L" parent="RackNorthBoxes" unique_id=926296524 instance=ExtResource("4_box")]
+transform = Transform3D(-1, 0, 8.74228e-08, 0, 1, 0, -8.74228e-08, 0, -1, 0.36, 2.23, -3.4)
+
+[node name="Box_N_T4_R" parent="RackNorthBoxes" unique_id=273665864 instance=ExtResource("4_box")]
+transform = Transform3D(-1, 0, 8.74228e-08, 0, 1, 0, -8.74228e-08, 0, -1, -0.36, 2.23, -3.4)
+
+[node name="RackSouth" parent="." unique_id=354374024 instance=ExtResource("3_rack")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, 4)
+
+[node name="RackSouthBoxes" type="Node3D" parent="." unique_id=563519441]
+
+[node name="Box_S_T1_L" parent="RackSouthBoxes" unique_id=1198633785 instance=ExtResource("4_box")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 0.56, 3.4)
+
+[node name="Box_S_T1_R" parent="RackSouthBoxes" unique_id=298670778 instance=ExtResource("4_box")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 0.56, 3.4)
+
+[node name="Box_S_T2_L" parent="RackSouthBoxes" unique_id=1665020803 instance=ExtResource("4_box")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 1.11, 3.4)
+
+[node name="Box_S_T2_R" parent="RackSouthBoxes" unique_id=1638719107 instance=ExtResource("4_box")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 1.11, 3.4)
+
+[node name="Box_S_T3_L" parent="RackSouthBoxes" unique_id=321098661 instance=ExtResource("4_box")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 1.67, 3.4)
+
+[node name="Box_S_T3_R" parent="RackSouthBoxes" unique_id=1800216448 instance=ExtResource("4_box")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 1.67, 3.4)
+
+[node name="Box_S_T4_L" parent="RackSouthBoxes" unique_id=1051222125 instance=ExtResource("4_box")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.36, 2.23, 3.4)
+
+[node name="Box_S_T4_R" parent="RackSouthBoxes" unique_id=322154355 instance=ExtResource("4_box")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 2.23, 3.4)
+
+[node name="ConveyorTable" parent="." unique_id=700551866 instance=ExtResource("7_table")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 5.2, 0, 0)
+
+[node name="AMR_1" parent="." unique_id=682623909 instance=ExtResource("2_amr")]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -5, 0.02, -0.6)
+
+[node name="AMR_2" parent="." unique_id=1461780278 instance=ExtResource("2_amr")]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -6.5, 0.02, 0.6)
+
+[node name="TrainingCamera" type="Camera3D" parent="." unique_id=1781684021 node_paths=PackedStringArray("target_node")]
+transform = Transform3D(1, 0, 0, 0, 0.5, 0.866025, 0, -0.866025, 0.5, 0, 18, 12)
+current = true
+script = ExtResource("5_cam")
+target_node = NodePath("../AMR_1")
+default_distance = 22.0
+
+[node name="TrainingHUD" parent="." unique_id=258873774 instance=ExtResource("6_hud")]

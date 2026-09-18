@@ -64,19 +64,50 @@ def export_ppo_model(model_path: str, output_path: str) -> None:
     # Manual forward
     h1 = np.tanh(np.dot(np.array(w0), dummy_input) + np.array(b0))
     h2 = np.tanh(np.dot(np.array(w1), h1) + np.array(b1))
-    pred_manual = np.dot(np.array(w2), h2) + np.array(b2)
+    pred_manual = np.clip(np.dot(np.array(w2), h2) + np.array(b2), -1.0, 1.0)
 
     diff = np.max(np.abs(pred_sb3 - pred_manual))
     print(f"✔ Numerical Parity Verified! Max difference: {diff:.8e}")
 
 
+STAGE_DEFAULTS = {
+    "s1": ("src/training/logs/checkpoints/ppo_s1_final.zip", "godot/models/ppo_s1_policy.json"),
+    "s2": ("src/training/logs/checkpoints/ppo_s2_final.zip", "godot/models/ppo_s2_policy.json"),
+    "s3": ("src/training/logs/checkpoints/ppo_s3_final.zip", "godot/models/ppo_s3_policy.json"),
+    "s4": ("src/training/logs/checkpoints/ppo_s4_final.zip", "godot/models/ppo_s4_policy.json"),
+    "s5": ("src/training/logs/checkpoints/ppo_s5_final.zip", "godot/models/ppo_s5_policy.json"),
+    "r1": ("src/training/logs/checkpoints/ppo_r1_final.zip", "godot/models/ppo_r1_policy.json"),
+    "r2": ("src/training/logs/checkpoints/ppo_r2_final.zip", "godot/models/ppo_r2_policy.json"),
+    "r3": ("src/training/logs/checkpoints/ppo_r3_final.zip", "godot/models/ppo_r3_policy.json"),
+    "r4": ("src/training/logs/checkpoints/ppo_r4_final.zip", "godot/models/ppo_r4_policy.json"),
+    "r4_testing_reward": ("src/training/logs/checkpoints/ppo_r4_testing_reward.zip", "godot/models/ppo_r4_testing_reward_policy.json"),
+}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Export PPO policy to Godot native JSON format.")
-    parser.add_argument("--model", type=str, default="src/training/logs/checkpoints/ppo_s5_final.zip", help="Path to input .zip")
-    parser.add_argument("--output", type=str, default="godot/models/ppo_s5_policy.json", help="Path to output .json")
+    parser.add_argument("--stage", type=str, default="", choices=list(STAGE_DEFAULTS.keys()), help="Stage shortcut (e.g. 'r4', 's5')")
+    parser.add_argument("--model", type=str, default="", help="Path to input .zip")
+    parser.add_argument("--output", type=str, default="", help="Path to output .json")
 
     args = parser.parse_args()
-    export_ppo_model(args.model, args.output)
+
+    model_path = args.model
+    output_path = args.output
+
+    if args.stage:
+        def_model, def_out = STAGE_DEFAULTS[args.stage.lower()]
+        if not model_path:
+            model_path = def_model
+        if not output_path:
+            output_path = def_out
+
+    if not model_path:
+        model_path = "src/training/logs/checkpoints/ppo_r4_final.zip"
+    if not output_path:
+        output_path = "godot/models/ppo_r4_policy.json"
+
+    export_ppo_model(model_path, output_path)
 
 
 if __name__ == "__main__":

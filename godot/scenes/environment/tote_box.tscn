@@ -1,4 +1,4 @@
-[gd_scene load_steps=5 format=3 uid="uid://dmx3totebox001"]
+[gd_scene load_steps=12 format=3 uid="uid://dmx3totebox001"]
 
 [ext_resource type="Script" path="res://scripts/environment/tote_box.gd" id="1_script"]
 
@@ -14,12 +14,43 @@ metallic = 0.15
 material = SubResource("StandardMaterial3D_default")
 size = Vector3(0.58, 0.32, 0.38)
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_trim"]
+albedo_color = Color(0.05, 0.08, 0.12, 1)
+roughness = 0.5
+metallic = 0.1
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tag"]
+albedo_color = Color(0.9, 0.9, 0.88, 1)
+roughness = 0.45
+
+[sub_resource type="BoxMesh" id="BoxMesh_rib"]
+material = SubResource("StandardMaterial3D_default")
+size = Vector3(0.52, 0.025, 0.012)
+
+[sub_resource type="BoxMesh" id="BoxMesh_rim_long"]
+material = SubResource("StandardMaterial3D_trim")
+size = Vector3(0.60, 0.03, 0.03)
+
+[sub_resource type="BoxMesh" id="BoxMesh_rim_short"]
+material = SubResource("StandardMaterial3D_trim")
+size = Vector3(0.03, 0.03, 0.40)
+
+[sub_resource type="BoxMesh" id="BoxMesh_handle"]
+material = SubResource("StandardMaterial3D_trim")
+size = Vector3(0.01, 0.06, 0.14)
+
+[sub_resource type="BoxMesh" id="BoxMesh_tag"]
+material = SubResource("StandardMaterial3D_tag")
+size = Vector3(0.008, 0.06, 0.14)
+
 [node name="ToteBox" type="RigidBody3D"]
 collision_layer = 8
-collision_mask = 15
-mass = 12.0
-linear_damp = 0.8
-angular_damp = 1.2
+collision_mask = 63
+mass = 28.0
+can_sleep = false
+continuous_cd = true
+linear_damp = 1.2
+angular_damp = 3.0
 script = ExtResource("1_script")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
@@ -27,3 +58,71 @@ shape = SubResource("BoxShape3D_tote")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
 mesh = SubResource("BoxMesh_tote")
+
+[node name="RibFront1" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.08, 0.196)
+mesh = SubResource("BoxMesh_rib")
+
+[node name="RibFront2" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.196)
+mesh = SubResource("BoxMesh_rib")
+
+[node name="RibFront3" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.08, 0.196)
+mesh = SubResource("BoxMesh_rib")
+
+[node name="RibBack1" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.08, -0.196)
+mesh = SubResource("BoxMesh_rib")
+
+[node name="RibBack2" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.196)
+mesh = SubResource("BoxMesh_rib")
+
+[node name="RibBack3" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.08, -0.196)
+mesh = SubResource("BoxMesh_rib")
+
+[node name="RimTopFront" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.165, 0.19)
+mesh = SubResource("BoxMesh_rim_long")
+
+[node name="RimTopBack" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.165, -0.19)
+mesh = SubResource("BoxMesh_rim_long")
+
+[node name="RimTopLeft" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.29, 0.165, 0)
+mesh = SubResource("BoxMesh_rim_short")
+
+[node name="RimTopRight" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.29, 0.165, 0)
+mesh = SubResource("BoxMesh_rim_short")
+
+[node name="RimBaseFront" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.165, 0.19)
+mesh = SubResource("BoxMesh_rim_long")
+
+[node name="RimBaseBack" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.165, -0.19)
+mesh = SubResource("BoxMesh_rim_long")
+
+[node name="RimBaseLeft" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.29, -0.165, 0)
+mesh = SubResource("BoxMesh_rim_short")
+
+[node name="RimBaseRight" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.29, -0.165, 0)
+mesh = SubResource("BoxMesh_rim_short")
+
+[node name="HandleRecessL" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.291, 0.02, 0)
+mesh = SubResource("BoxMesh_handle")
+
+[node name="HandleRecessR" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.291, 0.02, 0)
+mesh = SubResource("BoxMesh_handle")
+
+[node name="TagPlate" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.15, 0.11, 0.205)
+mesh = SubResource("BoxMesh_tag")

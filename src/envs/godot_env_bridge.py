@@ -95,9 +95,23 @@ class GodotTCPClient:
 
         return json.loads(payload_data.decode("utf-8"))
 
-    def reset(self, seed: int = 0, difficulty: float = 0.0) -> Tuple[List[float], Dict[str, Any]]:
+    def reset(
+        self,
+        seed: int = 0,
+        difficulty: float = 0.0,
+        full_tray: bool = False,
+        multi_box: bool = False,
+        **kwargs: Any,
+    ) -> Tuple[List[float], Dict[str, Any]]:
         """Send reset command and receive initial observation."""
-        self.send_message({"command": "reset", "seed": seed, "difficulty": difficulty})
+        msg: Dict[str, Any] = {"command": "reset", "seed": seed, "difficulty": difficulty}
+        if full_tray:
+            msg["full_tray"] = True
+        if multi_box:
+            msg["multi_box"] = True
+        for k, v in kwargs.items():
+            msg[k] = v
+        self.send_message(msg)
         res = self.receive_message()
         obs = res.get("observation", [])
         info = res.get("info", {})
@@ -137,6 +151,8 @@ class GodotEnvBridge:
         port: int = 11000,
         godot_bin: Optional[str] = None,
         ticks_per_step: int = 4,
+        physics_hz: int = 200,
+        action_hz: int = 60,
         headless: bool = True,
         autostart: bool = True,
     ) -> None:
@@ -144,6 +160,8 @@ class GodotEnvBridge:
         self.port = port
         self.godot_bin = godot_bin or find_godot_binary()
         self.ticks_per_step = ticks_per_step
+        self.physics_hz = physics_hz
+        self.action_hz = action_hz
         self.headless = headless
         self.process: Optional[subprocess.Popen] = None
         self.client: Optional[GodotTCPClient] = None
@@ -176,9 +194,11 @@ class GodotEnvBridge:
             self.godot_project_path,
             self.scene_path,
             f"--port={self.port}",
+            f"--physics_hz={self.physics_hz}",
+            f"--action_hz={self.action_hz}",
             f"--ticks={self.ticks_per_step}",
             "--fixed-fps",
-            "60",
+            str(self.physics_hz),
             "--max-fps",
             "0",
             "--disable-vsync",
@@ -201,10 +221,17 @@ class GodotEnvBridge:
             self.close()
             raise RuntimeError(f"Failed to connect to Godot on port {self.port}: {e}")
 
-    def reset(self, seed: int = 0, difficulty: float = 0.0) -> Tuple[List[float], Dict[str, Any]]:
+    def reset(
+        self,
+        seed: int = 0,
+        difficulty: float = 0.0,
+        full_tray: bool = False,
+        multi_box: bool = False,
+        **kwargs: Any,
+    ) -> Tuple[List[float], Dict[str, Any]]:
         if not self.client:
             raise RuntimeError("Bridge not started.")
-        return self.client.reset(seed, difficulty)
+        return self.client.reset(seed, difficulty, full_tray=full_tray, multi_box=multi_box, **kwargs)
 
     def step(self, action: List[float]) -> Tuple[List[float], float, bool, bool, Dict[str, Any]]:
         if not self.client:

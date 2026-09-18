@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://dmx3human001"]
+
+[ext_resource type="PackedScene" uid="uid://dmx3amr002" path="res://scenes/entities/amr_robot.tscn" id="1_amr_base"]
+[ext_resource type="Script" path="res://scripts/entities/human_control_amr.gd" id="2_human_script"]
+
+[node name="HumanControlAMR" instance=ExtResource("1_amr_base")]
+script = ExtResource("2_human_script")
+is_manual_control = true
+is_rl_control = false
+robot_id = "HUMAN-PILOT-01"

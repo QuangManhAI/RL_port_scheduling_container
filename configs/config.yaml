@@ -1,2 +1,103 @@
-# Configuration skeleton — copy this file to configs/config.yaml and fill in.
-# Centralized configuration for the data pipeline and training modules.
+# ==============================================================================
+# Central Configuration for AMR Warehouse & RL Training System
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. DUAL-CLOCK DECOUPLED ARCHITECTURE
+# ------------------------------------------------------------------------------
+clock:
+  physics_fps: 200          # High-fidelity simulation physics clock (200 Hz, dt = 0.005s)
+  action_fps: 40          # RL policy action decision clock (60 Hz, dt = 0.01667s)
+  render_fps: 0            # Display rendering clock (0 = unlocked / monitor refresh rate)
+  ticks_per_action: 1 # Fractional accumulator ratio (physics_fps / action_fps)
+  time_scale: 1          # Global engine time multiplier
+
+# ------------------------------------------------------------------------------
+# 2. ARENA & WORLD METRICS
+# ------------------------------------------------------------------------------
+arena:
+  half_extent: 7.0          # Arena boundary half-extent in meters (-7m to +7m)
+  global_vector_span: 16.0  # Metric normalization span for relative vectors
+  max_episode_steps: 300    # Default step limit per episode
+
+# ------------------------------------------------------------------------------
+# 3. AMR ROBOT KINEMATICS & DOCKING LIMITS
+# ------------------------------------------------------------------------------
+amr:
+  max_linear_velocity: 2.80 # Max linear speed in transit (m/s)
+  max_angular_velocity: 2.20 # Max angular turning speed (rad/s)
+  linear_acceleration: 2.50 # Drive acceleration rate (m/s^2)
+  linear_deceleration: 3.80 # Active braking rate (m/s^2)
+  
+  # Docking safety corridor & completion gate
+  corridor_entry_dist: 3.20 # Distance where gentle deceleration begins (m)
+  docking_crawl_speed: 0.40 # Target crawling velocity inside docking bay (m/s)
+  docking_speed_limit: 0.45 # Maximum allowed speed for valid dock completion (m/s)
+  docking_max_distance: 2.35 # Maximum horizontal distance to target tote box (m)
+  docking_min_alignment: 0.60 # Minimum rack-face alignment (cos(angle) >= 0.60, ~53 deg)
+
+# ------------------------------------------------------------------------------
+# 4. PHYSICAL RACK & ROBOTIC ARM SPECIFICATIONS
+# ------------------------------------------------------------------------------
+rack:
+  dimensions: [1.60, 2.80, 1.60] # Width, Height, Depth (m)
+  front_face_offset_z: -0.75     # Front leg plane Z coordinate (m)
+  tote_depth_offset_z: -0.60     # Tote box position Z coordinate (m)
+  topple_tilt_threshold: 0.94    # Dot product with UP < 0.94 (~20 deg) triggers topple failure
+  tier_heights:
+    tier_1: 0.56                 # Low tier shelf height (m)
+    tier_2: 1.11                 # Mid-low tier shelf height (m)
+    tier_3: 1.67                 # Mid-high tier shelf height (m)
+    tier_4: 2.23                 # High tier shelf height (m)
+  slot_lateral_offsets:
+    left: -0.36                  # Left slot X offset (m)
+    right: 0.36                  # Right slot X offset (m)
+
+arm:
+  max_reach: 2.15                # Maximum IK reach envelope (m)
+  min_reach: 0.20                # Minimum safe reach envelope (m)
+  shoulder_forward_offset: 0.30  # Arm shoulder position ahead of AMR chassis center (m)
+
+# ------------------------------------------------------------------------------
+# 5. RL STATE & ACTION SPACES
+# ------------------------------------------------------------------------------
+rl_spaces:
+  observation_dim_base: 13       # S1-S5 standard observation vector length
+  observation_dim_rack: 16       # R1-R4 extended rack observation vector length
+  action_dim: 3                  # Continuous outputs: [v_lin, v_ang, trigger]
+  action_ranges:
+    v_lin: [-0.15, 1.0]          # Scaled to [-0.42 m/s, +2.80 m/s]
+    v_ang: [-1.0, 1.0]           # Scaled to [-2.20 rad/s, +2.20 rad/s]
+    trigger: [-1.0, 1.0]         # Arm grasp / stow trigger threshold (> 0.25)
+
+# ------------------------------------------------------------------------------
+# 6. PPO TRAINING HYPERPARAMETERS
+# ------------------------------------------------------------------------------
+training:
+  learning_rate: 0.0003          # 3e-4 Adam learning rate
+  n_steps: 1024                  # Rollout buffer steps per worker
+  batch_size: 64                 # Minibatch size for SGD updates
+  gamma: 0.99                    # Discount factor
+  gae_lambda: 0.95               # GAE factor
+  clip_range: 0.20               # PPO surrogate clipping epsilon
+  ent_coef: 0.01                 # Entropy regularization coefficient
+  target_timesteps_r1: 40000     # Timesteps for Stage R1 gentle docking
+  workers: 2                     # Default parallel Godot instances
+  base_port: 11110               # Starting TCP port for training workers
+
+# ------------------------------------------------------------------------------
+# 7. MODEL PATHS & EXPORT LOCATIONS
+# ------------------------------------------------------------------------------
+paths:
+  checkpoints_dir: "src/training/logs/checkpoints"
+  tensorboard_dir: "src/training/logs/tensorboard"
+  godot_models_dir: "godot/models"
+  
+  # Stage checkpoints
+  s1_model: "src/training/logs/checkpoints/ppo_s1_final.zip"
+  r1_model: "src/training/logs/checkpoints/ppo_r1_final.zip"
+  r1_policy_json: "godot/models/ppo_r1_policy.json"
+  r2_model: "src/training/logs/checkpoints/ppo_r2_final.zip"
+  r2_policy_json: "godot/models/ppo_r2_policy.json"
+  s5_model: "src/training/logs/checkpoints/ppo_s5_final.zip"
+  s5_policy_json: "godot/models/ppo_s5_policy.json"
