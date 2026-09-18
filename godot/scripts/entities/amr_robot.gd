@@ -749,9 +749,10 @@ func execute_dynamic_unstow_and_place(target_deck_world: Vector3) -> bool:
 			held_box.sleeping = false
 			held_box.collision_layer = 8
 			held_box.collision_mask = 63
-			held_box.linear_velocity = Vector3(0.6, -0.05, 0.0)
+			held_box.linear_velocity = Vector3(0.0, -0.1, 0.0)
 			held_box.angular_velocity = Vector3.ZERO
-			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, Vector3(0.6, -0.05, 0.0))
+			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, Vector3(0.0, -0.1, 0.0))
+
 			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_ANGULAR_VELOCITY, Vector3.ZERO)
 			PhysicsServer3D.body_set_state(held_box.get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, final_world_tform)
 			held_box = null

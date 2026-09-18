@@ -35,14 +35,15 @@ size = Vector3(0.66, 0.03, 0.46)
 
 [node name="ShelfPod" type="RigidBody3D"]
 collision_layer = 2
-collision_mask = 63
-mass = 280.0
+mass = 220.0
+can_sleep = false
 continuous_cd = true
 center_of_mass_mode = 1
-center_of_mass = Vector3(0, 0.75, 0)
-linear_damp = 1.0
-angular_damp = 1.5
+center_of_mass = Vector3(0, 1.35, 0)
+linear_damp = 0.4
+angular_damp = 0.6
 script = ExtResource("1_script")
+
 
 [node name="ColLegFL" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 1.4, -0.75)

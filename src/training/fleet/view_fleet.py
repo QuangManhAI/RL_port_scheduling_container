@@ -36,6 +36,17 @@ SUB_STAGE_NAMES = {
 
 def compute_fleet_navigation_action(obs_agent: np.ndarray, agent_idx: int) -> np.ndarray:
     """Proactive goal-directed navigation with corridor steering, mutual yielding and collision avoidance."""
+    sub_stage = int(round(float(obs_agent[9]) * 5.0))
+    if sub_stage in [1, 2, 4]:
+        # DOCK_AND_PICK (1), TRAY_STOW (2), CONVEYOR_PLACE (4): Hold chassis stationary while arm works!
+        return np.array([0.0, 0.0], dtype=np.float32)
+
+    # If exiting rack bay (NAVIGATE_TO_CONVEYOR) and still close to rack wall (|z| > 1.8m),
+    # reverse straight out into the aisle before turning towards the conveyor to avoid clipping rack legs!
+    global_z = float(obs_agent[1]) * 8.0
+    if sub_stage == 3 and abs(global_z) > 1.8:
+        return np.array([-0.40, 0.0], dtype=np.float32)
+
     local_dx = float(obs_agent[6]) * 20.0
     local_dz = float(obs_agent[7]) * 20.0
     # In Godot, forward is -Z, right is +X
@@ -57,8 +68,11 @@ def compute_fleet_navigation_action(obs_agent: np.ndarray, agent_idx: int) -> np
     else:
         v_cmd = 0.05
 
-    if dist_to_goal <= 1.8:
-        v_cmd = min(v_cmd, 0.30)
+    if dist_to_goal <= 1.0:
+        v_cmd = min(v_cmd, 0.20)
+    elif dist_to_goal <= 1.8:
+        v_cmd = min(v_cmd, 0.35)
+
 
     # Mutual yielding using k-NN (Neighbor 1 is index 11..15)
     neighbor_dx = float(obs_agent[11]) * 6.0
@@ -165,6 +179,12 @@ def main() -> None:
                 next_obs, rewards, terminated, truncated, next_info = env.step(actions)
                 ep_reward += float(rewards.mean())
                 obs = next_obs
+                if "global_state" in next_info:
+                    gs = np.array(next_info["global_state"], dtype=np.float32)
+                    if len(gs) < 20:
+                        global_state = np.pad(gs, (0, 20 - len(gs)))
+                    else:
+                        global_state = gs[:20]
 
                 # Extract telemetry from agent_info
                 ag_info_list = next_info.get("agent_info", [])

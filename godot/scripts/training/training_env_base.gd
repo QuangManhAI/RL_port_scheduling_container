@@ -34,8 +34,18 @@ func _ready() -> void:
 	Engine.physics_ticks_per_second = physics_hz
 	_start_tcp_server()
 
-	# Pause scene physics initially until Python connects and issues reset()
-	get_tree().paused = true
+	# Determine if running in standalone/editor interactive mode or headless RL training
+	var is_headless: bool = DisplayServer.get_name() == "headless" or OS.has_feature("dedicated_server")
+	var has_human_amr: bool = has_node("HumanControlAMR") or get_tree().get_nodes_in_group("human_amr").size() > 0 or (amr != null and amr.is_manual_control)
+
+	if is_headless and not has_human_amr:
+		# Headless RL training: pause scene physics initially until Python connects and issues reset()
+		get_tree().paused = true
+	else:
+		# Interactive/human testing: keep physics unpaused so player can drive and test physics immediately
+		get_tree().paused = false
+		print("[TrainingEnvBase] Interactive mode active — Physics UNPAUSED for real-time testing.")
+
 
 func _parse_cmdline_args() -> void:
 	active_port = default_port
@@ -81,7 +91,9 @@ func _process(_delta: float) -> void:
 			print("[TrainingEnvBase] Python client disconnected from port %d" % active_port)
 			is_client_connected = false
 			client = null
-			get_tree().paused = true
+			var is_headless_disc: bool = DisplayServer.get_name() == "headless" or OS.has_feature("dedicated_server")
+			var has_human_disc: bool = has_node("HumanControlAMR") or get_tree().get_nodes_in_group("human_amr").size() > 0 or (amr != null and amr.is_manual_control)
+			get_tree().paused = (is_headless_disc and not has_human_disc)
 		return
 
 	if _is_processing_step:

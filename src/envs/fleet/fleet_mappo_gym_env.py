@@ -154,11 +154,14 @@ class FleetMappoGymEnv(gym.Env):
         """
         assert self.bridge is not None and self.bridge.client is not None
 
-        # Ensure actions is a nested list or 2D array
+        # Ensure actions is a nested list of floats
         if isinstance(actions, np.ndarray):
             actions_list = actions.tolist()
-        elif isinstance(actions, list):
-            actions_list = actions
+        elif isinstance(actions, (list, tuple)):
+            actions_list = [
+                a.tolist() if isinstance(a, np.ndarray) else list(a) if isinstance(a, (list, tuple)) else [float(a)]
+                for a in actions
+            ]
         else:
             actions_list = [[0.0, 0.0] for _ in range(self.num_agents)]
 

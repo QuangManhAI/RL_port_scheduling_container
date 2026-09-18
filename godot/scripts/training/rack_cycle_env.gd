@@ -195,10 +195,9 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 		var s_def = TOTE_SLOT_DEFS[i]
 		var world_box_pos = rack.to_global(s_def["offset"]) if rack else (Vector3(0.0, 0.0, -4.0) + s_def["offset"])
 		b.visible = true
-		if difficulty < 0.70:
-			b.freeze = true
-		else:
-			b.freeze = false
+		b.freeze = false
+		b.can_sleep = false
+		b.sleeping = false
 		b.linear_velocity = Vector3.ZERO
 		b.angular_velocity = Vector3.ZERO
 		if b.get_parent() != boxes_root:

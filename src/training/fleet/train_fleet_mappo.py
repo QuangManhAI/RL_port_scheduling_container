@@ -35,22 +35,50 @@ def main() -> None:
     parser.add_argument("--save-dir", type=str, default="src/training/logs/checkpoints/fleet", help="Checkpoint save directory")
     parser.add_argument("--lr-actor", type=float, default=3e-4, help="Actor learning rate")
     parser.add_argument("--lr-critic", type=float, default=1e-3, help="Critic learning rate")
-    parser.add_argument("--device", type=str, default="cpu", choices=["auto", "cuda", "cpu"])
+    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cuda", "cpu"])
+    parser.add_argument("--checkpoint", type=str, default=None, help="Path to checkpoint to resume from")
 
     args = parser.parse_args()
     headless_mode = not args.visual
 
     os.makedirs(args.save_dir, exist_ok=True)
-    device_name = "cuda" if (args.device == "cuda" or (args.device == "auto" and False)) else "cpu"
+    logs_dir = os.path.join(project_root, "src", "training", "logs")
+    metrics_dir = os.path.join(project_root, "experiments", "metrics")
+    os.makedirs(logs_dir, exist_ok=True)
+    os.makedirs(metrics_dir, exist_ok=True)
 
-    print("=" * 65)
-    print("   PHASE 08: FLEET-LEVEL MULTI-AGENT PPO (MAPPO) TRAINING")
-    print(f"   Architecture:   Decentralized Actor (37-D) + Centralized Critic (CTDE)")
-    print(f"   Fleet Size:     {args.num_amrs} AMRs | Dual 4-Tier Racks + Motorized Conveyor")
-    print(f"   Target Steps:   {args.steps:,} | Rollout Horizon: {args.rollout_len}")
-    print(f"   Mode:           {'Headless (Max Throughput)' if headless_mode else 'Visual Window Active'}")
-    print(f"   TCP Port:       {args.port} | Device: {device_name}")
-    print("=" * 65 + "\n")
+    log_file = os.path.join(logs_dir, "fleet_mappo_training.log")
+    csv_file = os.path.join(metrics_dir, "fleet_mappo_metrics.csv")
+
+    import logging
+    logger = logging.getLogger("MAPPO")
+    logger.setLevel(logging.INFO)
+    logger.handlers.clear()
+    f_handler = logging.FileHandler(log_file, mode="a", encoding="utf-8")
+    f_handler.setFormatter(logging.Formatter("[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+    s_handler = logging.StreamHandler(sys.stdout)
+    s_handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(f_handler)
+    logger.addHandler(s_handler)
+
+    if not os.path.exists(csv_file) or os.path.getsize(csv_file) == 0:
+        with open(csv_file, "w", encoding="utf-8") as f:
+            f.write("timestamp,step,episode,team_reward,delivered,actor_loss,critic_loss,sps,elapsed_sec\n")
+
+    import torch
+    device_name = "cuda" if (args.device == "cuda" or (args.device == "auto" and torch.cuda.is_available())) else "cpu"
+
+    logger.info("=" * 70)
+    logger.info("   PHASE 08: FLEET-LEVEL MULTI-AGENT PPO (MAPPO) TRAINING")
+    logger.info("   Architecture:   Decentralized Actor (37-D) + Centralized Critic (CTDE)")
+    logger.info(f"   Fleet Size:     {args.num_amrs} AMRs | Dual 4-Tier Racks + Motorized Conveyor")
+    logger.info(f"   Target Steps:   {args.steps:,} | Rollout Horizon: {args.rollout_len}")
+    logger.info(f"   Mode:           {'Headless (Max Throughput)' if headless_mode else 'Visual Window Active'}")
+    logger.info(f"   TCP Port:       {args.port} | Device: {device_name}")
+    logger.info(f"   Log File:       {log_file}")
+    logger.info(f"   Metrics CSV:    {csv_file}")
+    logger.info("=" * 70 + "\n")
+
 
     env = FleetMappoGymEnv(
         port=args.port,
@@ -67,6 +95,11 @@ def main() -> None:
         lr_critic=args.lr_critic,
         device=device_name,
     )
+
+    if args.checkpoint and os.path.exists(args.checkpoint):
+        agent.load(args.checkpoint)
+        print(f"✔ Successfully loaded checkpoint weights from: {args.checkpoint}")
+
 
     buffer = MultiAgentRolloutBuffer(
         buffer_size=args.rollout_len,
@@ -125,7 +158,7 @@ def main() -> None:
                     delivered = next_info.get("total_fleet_delivered", 0)
                     elapsed = time.time() - t_start
                     sps = int(total_steps / max(0.1, elapsed))
-                    print(
+                    logger.info(
                         f"[MAPPO Ep {episodes:3d}] Steps: {total_steps:6d}/{args.steps} | "
                         f"Team Rew: {ep_team_reward:+6.2f} | Delivered: {delivered:2d}/6 | SPS: {sps}"
                     )
@@ -142,20 +175,33 @@ def main() -> None:
             advantages, returns = buffer.compute_returns_and_advantages(last_val, False)
             metrics = agent.train_step(buffer, advantages, returns)
 
-            print(
+            elapsed = time.time() - t_start
+            sps = int(total_steps / max(0.1, elapsed))
+            logger.info(
                 f"  >> [Update @ {total_steps:6d}] "
                 f"Actor Loss: {metrics['actor_loss']:+.4f} | "
-                f"Critic Loss: {metrics['critic_loss']:.4f}"
+                f"Critic Loss: {metrics['critic_loss']:.4f} | "
+                f"SPS: {sps}"
             )
+
+            # Write row to CSV
+            try:
+                with open(csv_file, "a", encoding="utf-8") as f:
+                    timestamp_str = time.strftime("%Y-%m-%d %H:%M:%S")
+                    f.write(f"{timestamp_str},{total_steps},{episodes},{ep_team_reward:.2f},{delivered if 'delivered' in locals() else 0},{metrics['actor_loss']:.4f},{metrics['critic_loss']:.4f},{sps},{elapsed:.1f}\n")
+            except Exception:
+                pass
 
             # Periodic Checkpoint
             if total_steps % max(args.rollout_len * 4, 2048) == 0:
                 ckpt_path = os.path.join(args.save_dir, "mappo_fleet_latest.pt")
                 agent.save(ckpt_path)
+                logger.info(f"  [Checkpoint] Saved latest policy snapshot to: {ckpt_path}")
 
         final_ckpt = os.path.join(args.save_dir, "mappo_fleet_final.pt")
         agent.save(final_ckpt)
-        print(f"\n✔ MAPPO Training Completed successfully! Final model saved to: {final_ckpt}")
+        logger.info(f"\n✔ MAPPO Training Completed successfully! Final model saved to: {final_ckpt}")
+
 
     finally:
         env.close()
