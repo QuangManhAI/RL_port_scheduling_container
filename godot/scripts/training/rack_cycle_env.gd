@@ -76,6 +76,14 @@ var _stow_reward_given: int = 0
 var _place_reward_given: int = 0
 var _completion_reward_given: bool = false
 
+@export var reward_mode: String = "standard" ## "standard" or "r4_testing_reward"
+@export var randomize_layout: bool = false ## Randomize rack and conveyor positions/orientations each episode
+@export var lidar_max_range: float = 6.0 ## 360-Degree LiDAR maximum range in meters (like MAPPO)
+var truck_boxes_loaded: int = 0
+var _truck_boxes_awarded: int = 0
+var target_delivery_count: int = 1
+var _terminal_penalty_given: bool = false
+
 var native_policy: RefCounted = null
 var _native_reset_timer: float = 0.0
 var _native_action_accum: float = 0.0
@@ -90,15 +98,71 @@ func _ready() -> void:
 	_init_boxes()
 	super._ready()
 
+	if conveyor and conveyor.has_signal("box_loaded_onto_truck"):
+		conveyor.box_loaded_onto_truck.connect(_on_box_loaded_onto_truck)
+
 	# Check for command line flags for native execution
 	var args = OS.get_cmdline_user_args()
 	if args.is_empty(): args = OS.get_cmdline_args()
 	for a in args:
 		if a == "--native-ai" or a == "--native":
 			native_ai_mode = true
+		elif a.begins_with("--delivery-count=") or a.begins_with("--delivery_count="):
+			last_reset_msg["delivery_count"] = int(a.split("=")[1])
+		elif a == "--full-tray" or a == "--full_tray":
+			last_reset_msg["full_tray"] = true
+		elif a.begins_with("--manifest="):
+			var m_str = a.split("=")[1]
+			var m_list: Array[int] = []
+			for s in m_str.split(","):
+				if s.strip_edges().is_valid_int():
+					m_list.append(int(s.strip_edges()))
+			last_reset_msg["manifest"] = m_list
+		elif a.begins_with("--policy-path=") or a.begins_with("--policy_path=") or a.begins_with("--policy="):
+			policy_json_path = a.split("=")[1]
+		elif a.begins_with("--reward-mode=") or a.begins_with("--reward_mode="):
+			reward_mode = a.split("=")[1]
+		elif a == "--r4-testing-reward" or a == "--r4_testing_reward":
+			reward_mode = "r4_testing_reward"
+		elif a == "--randomize-layout" or a == "--randomize_layout":
+			randomize_layout = true
+
+	if reward_mode == "r4_testing_reward" and policy_json_path == "res://models/ppo_r4_policy.json":
+		if FileAccess.file_exists("res://models/ppo_r4_testing_reward_policy.json"):
+			policy_json_path = "res://models/ppo_r4_testing_reward_policy.json"
 
 	if native_ai_mode:
 		_init_native_ai()
+
+func _on_box_loaded_onto_truck(_b: ToteBox) -> void:
+	truck_boxes_loaded += 1
+	print("[RackCycleEnv] ★ BOX LOADED INTO TRUCK! Total: %d" % truck_boxes_loaded)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_N:
+			native_ai_mode = not native_ai_mode
+			print("[RackCycleEnv] Native AI Mode toggled: ", native_ai_mode)
+			if native_ai_mode:
+				_init_native_ai()
+			else:
+				if amr:
+					amr.set_rl_control(0.0, 0.0)
+		elif event.keycode == KEY_R:
+			_on_arena_reset(0, 0.0)
+			print("[RackCycleEnv] Arena Reset Triggered!")
+		elif event.keycode == KEY_SPACE or event.keycode == KEY_P:
+			get_tree().paused = not get_tree().paused
+			print("[RackCycleEnv] Paused: ", get_tree().paused)
+		elif event.keycode == KEY_1:
+			Engine.time_scale = 1.0
+			print("[RackCycleEnv] Time scale: 1.0x (Normal)")
+		elif event.keycode == KEY_2:
+			Engine.time_scale = 1.5
+			print("[RackCycleEnv] Time scale: 1.5x (Fast)")
+		elif event.keycode == KEY_3:
+			Engine.time_scale = 2.0
+			print("[RackCycleEnv] Time scale: 2.0x (Turbo)")
 
 func _init_native_ai() -> void:
 	native_policy = NeuralPolicyScript.new()
@@ -107,6 +171,8 @@ func _init_native_ai() -> void:
 		Engine.physics_ticks_per_second = physics_hz
 		get_tree().paused = false
 		_on_arena_reset(0, 0.0)
+	else:
+		push_error("[RackCycleEnv] Failed to load native policy from: " + policy_json_path)
 
 func _setup_materials() -> void:
 	_mat_normal = StandardMaterial3D.new()
@@ -150,38 +216,66 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 	total_placed_boxes = 0
 	initial_stowed_count = 0
 	is_full_tray_mode = false
+	truck_boxes_loaded = 0
+	_truck_boxes_awarded = 0
+	_terminal_penalty_given = false
+	if last_reset_msg.has("reward_mode"):
+		reward_mode = str(last_reset_msg["reward_mode"])
 	dispatch_strategy = str(last_reset_msg.get("dispatch_strategy", "auto"))
 
 	if last_reset_msg.get("full_tray", false) or difficulty >= 2.0:
 		is_full_tray_mode = true
 
-	# 1. Reset Rack position and physics state at z = -4.0m, facing aisle (rotation.y = PI)
+	var should_randomize_layout: bool = randomize_layout or (reward_mode == "r4_testing_reward") or last_reset_msg.get("randomize_layout", false)
+
+	var rack_x: float = 0.0
+	var rack_z: float = -4.0
+	var rack_yaw: float = PI
+
+	var conv_x: float = 0.0
+	var conv_z: float = 4.0
+	var conv_yaw: float = 0.0
+
+	if should_randomize_layout:
+		# Vary rack position and orientation across the north corridor
+		rack_x = rng.randf_range(-2.2, 2.2)
+		rack_z = rng.randf_range(-5.2, -3.4)
+		rack_yaw = PI + rng.randf_range(-0.25, 0.25)
+
+		# Vary conveyor table position and orientation across the south corridor (clear of walls)
+		conv_x = rng.randf_range(-1.4, 0.4)
+		conv_z = rng.randf_range(3.5, 4.6)
+		conv_yaw = rng.randf_range(-0.15, 0.15)
+
+	# 1. Reset Rack position and physics state
 	if rack:
-		rack.global_position = Vector3(0.0, 0.02, -4.0)
-		rack.rotation = Vector3(0.0, PI, 0.0)
+		rack.global_position = Vector3(rack_x, 0.02, rack_z)
+		rack.rotation = Vector3(0.0, rack_yaw, 0.0)
 		rack.reset_rack()
 		if difficulty < 0.70:
 			rack.freeze = true
 		else:
 			rack.freeze = false
 
-	# 2. Reset Conveyor Table at z = +4.0m
+	# 2. Reset Conveyor Table
 	if conveyor:
-		conveyor.global_position = Vector3(0.0, 0.0, 4.0)
-		conveyor.rotation = Vector3.ZERO
+		conveyor.global_position = Vector3(conv_x, 0.0, conv_z)
+		conveyor.rotation = Vector3(0.0, conv_yaw, 0.0)
 		if conveyor.has_method("reset_conveyor"):
 			conveyor.reset_conveyor()
 
-	# 3. Spawn AMR in mid-bay corridor (between rack and conveyor)
+	# 3. Spawn AMR in mid-bay corridor (safely between rack and conveyor)
 	if amr:
 		amr.arm_tween_speed_scale = 3.5
-		var spawn_x = rng.randf_range(-2.0, 2.0)
-		var spawn_z = rng.randf_range(-1.2, 1.2)
+		var min_safe_z: float = rack_z + 1.8
+		var max_safe_z: float = conv_z - 1.8
+		var spawn_x = rng.randf_range(-2.4, 2.4)
+		var spawn_z = rng.randf_range(min_safe_z, max_safe_z)
 		var spawn_yaw = rng.randf_range(-PI, PI)
 
 		if is_full_tray_mode:
 			spawn_x = rng.randf_range(-1.5, 1.5)
-			spawn_z = rng.randf_range(-1.2, 0.5)
+			spawn_z = rng.randf_range(min_safe_z + 0.4, max_safe_z - 0.4)
 			spawn_yaw = rng.randf_range(-0.35, 0.35)
 
 		amr.reset_robot(Vector3(spawn_x, 0.0, spawn_z), spawn_yaw)
@@ -219,9 +313,11 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 		var req_count: int = int(last_reset_msg["delivery_count"])
 		var order: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7]
 		order.shuffle()
-		for i in range(min(req_count, order.size())):
+		var count = order.size() if (req_count < 0 or req_count >= 8) else min(req_count, order.size())
+		for i in range(count):
 			delivery_manifest.append(order[i])
-	elif last_reset_msg.get("multi_box", false) and not is_full_tray_mode:
+	elif reward_mode == "r4_testing_reward" or last_reset_msg.get("multi_box", false):
+		# Default multi-box in testing reward mode (deliver 2 boxes or full sequence)
 		var order: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7]
 		order.shuffle()
 		delivery_manifest = [order[0], order[1]]
@@ -230,6 +326,8 @@ func _on_arena_reset(seed_val: int, difficulty: float) -> void:
 	else:
 		# Single box delivery default
 		delivery_manifest = [target_box_idx]
+
+	target_delivery_count = 2 if is_full_tray_mode else max(1, delivery_manifest.size())
 
 	if not delivery_manifest.is_empty():
 		target_box_idx = delivery_manifest[0]
@@ -330,16 +428,48 @@ func _get_subgoal_normal() -> Vector3:
 		# Bay faces towards -Z in local rack coords (global -Z from rack center)
 		return -rack.global_transform.basis.z if rack else Vector3.FORWARD
 	else:
-		# Conveyor table faces toward aisle (-Z in global space)
-		return Vector3(0.0, 0.0, -1.0)
+		# Conveyor table faces toward aisle
+		return -conveyor.global_transform.basis.z if conveyor else Vector3(0.0, 0.0, -1.0)
 
 const GLOBAL_ARENA_HALF_EXTENT: float = 8.0
 const GLOBAL_VECTOR_SPAN: float = 16.0
 
+func _sample_360_lidar(ego: AmrRobot) -> Array:
+	var rays: Array = []
+	var num_rays: int = 16
+	var angle_step: float = (2.0 * PI) / float(num_rays)
+	var ego_pos: Vector3 = ego.global_position + Vector3(0.0, 0.25, 0.0) # Chassis height
+	var space_state: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
+
+	if not space_state:
+		for i in range(num_rays):
+			rays.append(1.0)
+		return rays
+
+	var ego_heading = ego.rotation.y
+
+	for i in range(num_rays):
+		var theta = ego_heading + (float(i) * angle_step)
+		var ray_dir = Vector3(-sin(theta), 0.0, -cos(theta)).normalized()
+		var ray_end = ego_pos + (ray_dir * lidar_max_range)
+
+		var query = PhysicsRayQueryParameters3D.create(ego_pos, ray_end)
+		query.collision_mask = 3 # Static arena walls (layer 1), racks and conveyor deck (layer 2)
+		query.exclude = [ego.get_rid()]
+
+		var hit = space_state.intersect_ray(query)
+		if hit and not hit.is_empty():
+			var hit_dist = ego_pos.distance_to(hit.position)
+			rays.append(clampf(hit_dist / lidar_max_range, 0.0, 1.0))
+		else:
+			rays.append(1.0)
+
+	return rays
+
 func _compute_observation() -> Array:
 	var obs: Array = []
 	if not amr:
-		for i in range(16): obs.append(0.0)
+		for i in range(32): obs.append(0.0)
 		return obs
 
 	# 0..3: Global arena pose normalized to 8m half-extent
@@ -392,6 +522,11 @@ func _compute_observation() -> Array:
 	var sub_norm = _get_subgoal_normal()
 	var face_align = clampf(fwd.dot(-sub_norm), -1.0, 1.0)
 	obs.append(face_align)
+
+	# 16..31: 360-Degree 16-ray LiDAR Scan (matching MAPPO agents)
+	var lidar_rays = _sample_360_lidar(amr)
+	for r_dist in lidar_rays:
+		obs.append(float(r_dist))
 
 	return obs
 
@@ -604,7 +739,7 @@ func _compute_reward(action: Array) -> float:
 		wall_collided = true
 		reward -= 2.0
 
-	# 4. Phase-Specific Shaping
+	# 4. Phase-Specific Subgoal Shaping
 	var trigger = float(action[2]) if action.size() > 2 else 0.0
 
 	match current_sub_stage:
@@ -643,30 +778,44 @@ func _compute_reward(action: Array) -> float:
 
 		CycleSubStage.UNSTOW_AND_PLACE, CycleSubStage.CYCLE_COMPLETE:
 			if total_placed_boxes > _place_reward_given:
-				reward += 15.0
+				reward += 10.0
 				_place_reward_given = total_placed_boxes
-			if cycle_success and not _completion_reward_given:
-				reward += 30.0 + maxf(0.0, face_align) * 5.0
-				_completion_reward_given = true
 
-	# 5. Check for dropped / fallen boxes
+	# 5. ULTIMATE REWARD: Only counted when the box enters the cargo of the truck
+	if truck_boxes_loaded > _truck_boxes_awarded:
+		var newly_loaded = truck_boxes_loaded - _truck_boxes_awarded
+		reward += float(newly_loaded) * 50.0
+		_truck_boxes_awarded = truck_boxes_loaded
+
+	# 6. TERMINAL PENALTY: Penalize every target box not in the truck cargo at episode end
+	var is_ending: bool = (step_count + 1 >= max_episode_steps) or rack_toppled or wall_collided or (truck_boxes_loaded >= target_delivery_count)
+	if is_ending and not _terminal_penalty_given:
+		var undelivered = max(0, target_delivery_count - truck_boxes_loaded)
+		if undelivered > 0:
+			reward -= float(undelivered) * 25.0
+		_terminal_penalty_given = true
+
+	# 7. Check for dropped / fallen boxes
 	for b in boxes:
 		if b and is_instance_valid(b) and b.global_position.y < -0.20:
 			box_dropped = true
 			reward -= 15.0
+			b.visible = false
+			b.global_position = Vector3(0.0, -10.0, 0.0)
 			break
 
-	# 6. Failed premature trigger penalty
+	# 8. Failed premature trigger penalty
 	if failed_attempt:
 		reward -= 0.05
 		failed_attempt = false
 
-	# 7. Step penalty
+	# 9. Step penalty
 	reward -= 0.02
 	return reward
 
 func _is_terminated() -> bool:
-	return cycle_success or rack_toppled or wall_collided or box_dropped
+	var all_truck_loaded: bool = (truck_boxes_loaded >= target_delivery_count and not amr._is_arm_tweening)
+	return all_truck_loaded or rack_toppled or wall_collided
 
 func _get_info() -> Dictionary:
 	var forward = -amr.global_transform.basis.z if amr else Vector3.FORWARD
@@ -717,4 +866,7 @@ func _get_info() -> Dictionary:
 		"all_boxes_transported": (is_placed and (amr.get_stowed_box_count() if amr else 0) == 0 and delivery_manifest.is_empty()),
 		"box_dropped": box_dropped,
 		"dispatch_strategy": dispatch_strategy,
+		"truck_boxes_loaded": truck_boxes_loaded,
+		"target_delivery_count": target_delivery_count,
+		"reward_mode": reward_mode,
 	}

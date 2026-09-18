@@ -1,13 +1,13 @@
 [gd_scene format=3 uid="uid://caey6se4k8a57"]
 
 [ext_resource type="Script" uid="uid://djokj8t5q2xrh" path="res://scripts/training/rack_cycle_env.gd" id="1_env"]
-[ext_resource type="PackedScene" uid="uid://dmx3amr002" path="res://scenes/entities/amr_robot.tscn" id="2_amr"]
+[ext_resource type="PackedScene" uid="uid://cy54cd7r43hde" path="res://scenes/entities/amr_robot.tscn" id="2_amr"]
 [ext_resource type="PackedScene" uid="uid://dmx3human001" path="res://scenes/entities/amr_human_control.tscn" id="2_svx4a"]
 [ext_resource type="PackedScene" uid="uid://dmx3shelf003" path="res://scenes/environment/shelf_pod.tscn" id="3_rack"]
 [ext_resource type="PackedScene" uid="uid://cvalk6p0b3m1u" path="res://scenes/environment/tote_box.tscn" id="4_box"]
 [ext_resource type="Script" uid="uid://b6ke6y6k4ocfx" path="res://scripts/training/training_camera.gd" id="5_cam"]
 [ext_resource type="PackedScene" path="res://scenes/training/training_hud.tscn" id="6_hud"]
-[ext_resource type="PackedScene" uid="uid://dpkgwxstqwfg" path="res://scenes/environment/conveyor_table.tscn" id="7_table"]
+[ext_resource type="PackedScene" path="res://scenes/environment/conveyor_table.tscn" id="7_table"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_r4"]
 sky_top_color = Color(0.38, 0.58, 0.92, 1)
@@ -76,12 +76,6 @@ shape = SubResource("BoxShape3D_floor")
 [node name="MeshInstance3D" type="MeshInstance3D" parent="ArenaFloor" unique_id=1618251084]
 mesh = SubResource("BoxMesh_floor")
 
-[node name="HumanControlAMR" parent="ArenaFloor/MeshInstance3D" unique_id=68597026 instance=ExtResource("2_svx4a")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.5293922, 0.43999982, -3.3439157)
-camera_distance = 4.2
-camera_height = 2.4
-sprint_multiplier = 1.6
-
 [node name="ArenaWalls" type="StaticBody3D" parent="." unique_id=1851951420]
 collision_mask = 15
 
@@ -115,6 +109,7 @@ mesh = SubResource("BoxMesh_wall_ew")
 
 [node name="ShelfPod" parent="." unique_id=1745321082 instance=ExtResource("3_rack")]
 transform = Transform3D(-1, 0, 8.74228e-08, 0, 1, 0, -8.74228e-08, 0, -1, 0, 0.02, -4)
+collision_mask = 15
 
 [node name="RackBoxes" type="Node3D" parent="." unique_id=891629564]
 
@@ -146,7 +141,7 @@ transform = Transform3D(-1, 0, 8.74228e-08, 0, 1, 0, -8.74228e-08, 0, -1, -0.36,
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 4)
 
 [node name="AMR_Robot" parent="." unique_id=548469579 instance=ExtResource("2_amr")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.57170093, 0.0008020401, -0.58202755)
 
 [node name="TrainingCamera" type="Camera3D" parent="." unique_id=1953054710 node_paths=PackedStringArray("target_node")]
 transform = Transform3D(1, 0, 0, 0, 0.70710677, 0.70710677, 0, -0.70710677, 0.70710677, 0, 12, 10)
@@ -156,3 +151,9 @@ target_node = NodePath("../AMR_Robot")
 default_distance = 18.0
 
 [node name="TrainingHUD" parent="." unique_id=564324981 instance=ExtResource("6_hud")]
+
+[node name="HumanControlAMR" parent="." unique_id=1805461604 instance=ExtResource("2_svx4a")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.635915, 0.44000006, -3.0042508)
+camera_distance = 4.2
+camera_height = 2.4
+sprint_multiplier = 1.6

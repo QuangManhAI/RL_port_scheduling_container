@@ -52,16 +52,17 @@ def warm_start_rack_policy(
                 source_model.policy.mlp_extractor.value_net[0].bias
             )
         else:
-            # 13-to-16 surgery: copy base features and initialize new features near zero
-            target_model.policy.mlp_extractor.policy_net[0].weight[:, :base_dim] = old_w_pi
+            # Dimension surgery (e.g. 13->16, 16->32): copy overlapping base features and init new features near zero
+            copy_dim = min(old_w_pi.shape[1], target_w_pi.shape[1], base_dim)
+            target_model.policy.mlp_extractor.policy_net[0].weight[:, :copy_dim] = old_w_pi[:, :copy_dim]
             target_model.policy.mlp_extractor.policy_net[0].bias.copy_(old_b_pi)
-            target_model.policy.mlp_extractor.policy_net[0].weight[:, base_dim:].normal_(mean=0.0, std=0.01)
+            target_model.policy.mlp_extractor.policy_net[0].weight[:, copy_dim:].normal_(mean=0.0, std=0.01)
 
             old_w_vf = source_model.policy.mlp_extractor.value_net[0].weight
             old_b_vf = source_model.policy.mlp_extractor.value_net[0].bias
-            target_model.policy.mlp_extractor.value_net[0].weight[:, :base_dim] = old_w_vf
+            target_model.policy.mlp_extractor.value_net[0].weight[:, :copy_dim] = old_w_vf[:, :copy_dim]
             target_model.policy.mlp_extractor.value_net[0].bias.copy_(old_b_vf)
-            target_model.policy.mlp_extractor.value_net[0].weight[:, base_dim:].normal_(mean=0.0, std=0.01)
+            target_model.policy.mlp_extractor.value_net[0].weight[:, copy_dim:].normal_(mean=0.0, std=0.01)
 
         # 3. Policy Network - Hidden Layer (Layer 2)
         target_model.policy.mlp_extractor.policy_net[2].weight.copy_(

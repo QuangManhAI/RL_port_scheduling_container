@@ -58,6 +58,7 @@ STAGE_MAP = {
     "rack_pick": (RackPickGymEnv, "src/training/logs/checkpoints/ppo_r3_final.zip"),
     "r4": (RackCycleGymEnv, "src/training/logs/checkpoints/ppo_r4_final.zip"),
     "rack_cycle": (RackCycleGymEnv, "src/training/logs/checkpoints/ppo_r4_final.zip"),
+    "r4_testing_reward": (RackCycleGymEnv, "src/training/logs/checkpoints/ppo_r4_testing_reward.zip"),
 }
 
 
@@ -84,6 +85,7 @@ def main() -> None:
     parser.add_argument("--full-tray", action="store_true", help="Pre-stow 2 boxes in CargoTray for immediate transit")
     parser.add_argument("--sequencer", action="store_true", help="Force modular RackCycleSequencer orchestration for Stage R4")
     parser.add_argument("--dispatch-strategy", type=str, default="auto", choices=["auto", "batch", "immediate"], help="Dispatch strategy for R4 tray fill vs delivery decision (auto: cost-benefit evaluation, batch: fill tray, immediate: single box)")
+    parser.add_argument("--randomize-layout", action="store_true", help="Vary position and orientation of rack and conveyor table")
 
     args = parser.parse_args()
 
@@ -98,7 +100,7 @@ def main() -> None:
         godot_bin = find_godot_binary()
         proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         godot_proj = os.path.join(proj_root, "godot")
-        if stage_key in ("r4", "rack_cycle"):
+        if stage_key in ("r4", "rack_cycle", "r4_testing_reward"):
             scene = "res://scenes/training/training_rack_cycle.tscn"
         elif stage_key in ("r3", "rack_pick"):
             scene = "res://scenes/training/training_rack_pick.tscn"
@@ -130,20 +132,34 @@ def main() -> None:
             "0",
             "--disable-vsync",
         ]
+        if stage_key == "r4_testing_reward":
+            cmd.append("--reward-mode=r4_testing_reward")
+            cmd.append("--policy=res://models/ppo_r4_testing_reward_policy.json")
+            cmd.append("--randomize-layout")
+        elif args.randomize_layout:
+            cmd.append("--randomize-layout")
+
+        if args.delivery_count > 0:
+            cmd.append(f"--delivery-count={args.delivery_count}")
+        if args.manifest:
+            cmd.append(f"--manifest={args.manifest}")
+        if args.full_tray:
+            cmd.append("--full-tray")
+
         subprocess.run(cmd)
         return
 
-    is_r4 = stage_key in ("r4", "rack_cycle")
+    is_r4 = stage_key in ("r4", "rack_cycle", "r4_testing_reward")
     use_sequencer = False
     sequencer: Optional[RackCycleSequencer] = None
     model: Optional[PPO] = None
 
     if is_r4:
         user_specified_model = bool(args.model and os.path.isfile(args.model))
-        if user_specified_model and not args.sequencer:
-            print(f">> Loading User-Specified PPO Model: {args.model}")
-            model = PPO.load(args.model, device="cpu")
-        else:
+        if stage_key == "r4_testing_reward" or user_specified_model:
+            print(f">> Loading Trained PPO Model: {model_path}")
+            model = PPO.load(model_path, device="cpu")
+        elif not args.sequencer:
             use_sequencer = True
             sequencer = RackCycleSequencer(r4_policy_path=None)
             print(">> Stage R4 Modular Sequencer Active (Reliable Multi-Box Chained Skills)")
@@ -193,6 +209,10 @@ def main() -> None:
         reset_options["full_tray"] = True
     if args.multi_box:
         reset_options["multi_box"] = True
+    if args.randomize_layout or stage_key == "r4_testing_reward":
+        reset_options["randomize_layout"] = True
+    if stage_key == "r4_testing_reward":
+        reset_options["reward_mode"] = "r4_testing_reward"
 
     step_interval = 1.0 / max(1.0, action_hz)
     episode_idx = 0

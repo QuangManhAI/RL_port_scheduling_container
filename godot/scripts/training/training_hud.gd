@@ -49,11 +49,14 @@ func _process(delta: float) -> void:
 		return
 
 	# Status line
-	if env_node.is_client_connected:
+	if "native_ai_mode" in env_node and env_node.native_ai_mode:
+		status_label.text = "● Zero-Latency Native In-Engine AI ACTIVE | [N] Toggle AI | [R] Reset | [1-3] Speed | [P/Space] Pause"
+		status_label.modulate = Color(0.1, 0.95, 1.0, 1.0)
+	elif env_node.is_client_connected:
 		status_label.text = "● RL Client Connected (Port %d) | Deterministic Lockstep Active" % env_node.active_port
 		status_label.modulate = Color(0.2, 0.9, 0.3, 1.0)
 	else:
-		status_label.text = "○ TCP Server Listening on 127.0.0.1:%d | Waiting for Python..." % env_node.active_port
+		status_label.text = "○ TCP Server Listening on 127.0.0.1:%d | Press [N] to Run Native AI Standalone" % env_node.active_port
 		status_label.modulate = Color(0.9, 0.7, 0.2, 1.0)
 
 	# Telemetry

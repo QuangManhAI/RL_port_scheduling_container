@@ -54,11 +54,11 @@ class RackCycleGymEnv(gym.Env):
             dtype=np.float32,
         )
 
-        # Observation Space: 16 normalized floats
+        # Observation Space: 32 normalized floats (16 kinematic/task features + 16-ray LiDAR)
         self.observation_space = spaces.Box(
             low=-1.0,
             high=1.0,
-            shape=(16,),
+            shape=(32,),
             dtype=np.float32,
         )
 

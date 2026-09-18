@@ -1,31 +1,32 @@
-[gd_scene load_steps=44 format=3 uid="uid://dmx3amr002"]
+[gd_scene format=3 uid="uid://cy54cd7r43hde"]
 
 [ext_resource type="Script" path="res://scripts/entities/amr_robot.gd" id="1_script"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_chassis_dark"]
-albedo_color = Color(0.11, 0.12, 0.15, 1)
-metallic = 0.7
-roughness = 0.25
+albedo_color = Color(0.075, 0.09, 0.115, 1)
+metallic = 0.82
+roughness = 0.3
 
 [sub_resource type="BoxMesh" id="BoxMesh_base"]
 material = SubResource("StandardMaterial3D_chassis_dark")
 size = Vector3(0.95, 0.26, 1.45)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_neon_strip"]
-albedo_color = Color(0.0, 0.85, 1.0, 1)
+albedo_color = Color(0.0, 0.65, 0.82, 1)
 emission_enabled = true
-emission = Color(0.0, 0.85, 1.0, 1)
-emission_energy_multiplier = 4.0
+emission = Color(0.0, 0.65, 0.82, 1)
+emission_energy_multiplier = 1.8
+roughness = 0.28
 
 [sub_resource type="BoxMesh" id="BoxMesh_side_strip"]
 material = SubResource("StandardMaterial3D_neon_strip")
 size = Vector3(0.025, 0.03, 1.4)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_headlight"]
-albedo_color = Color(0.9, 0.95, 1.0, 1)
+albedo_color = Color(0.82, 0.91, 0.98, 1)
 emission_enabled = true
-emission = Color(0.9, 0.95, 1.0, 1)
-emission_energy_multiplier = 4.5
+emission = Color(0.82, 0.91, 0.98, 1)
+emission_energy_multiplier = 2.8
 
 [sub_resource type="BoxMesh" id="BoxMesh_light"]
 material = SubResource("StandardMaterial3D_headlight")
@@ -49,9 +50,9 @@ bottom_radius = 0.26
 height = 0.1
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_arm_white"]
-albedo_color = Color(0.86, 0.89, 0.92, 1)
-metallic = 0.25
-roughness = 0.35
+albedo_color = Color(0.68, 0.72, 0.76, 1)
+metallic = 0.45
+roughness = 0.31
 
 [sub_resource type="BoxMesh" id="BoxMesh_arm_boom"]
 material = SubResource("StandardMaterial3D_arm_white")
@@ -62,9 +63,9 @@ material = SubResource("StandardMaterial3D_arm_white")
 size = Vector3(0.12, 0.86, 0.14)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_gripper"]
-albedo_color = Color(0.22, 0.24, 0.28, 1)
+albedo_color = Color(0.095, 0.11, 0.135, 1)
 metallic = 0.9
-roughness = 0.2
+roughness = 0.22
 
 [sub_resource type="BoxMesh" id="BoxMesh_gripper_base"]
 material = SubResource("StandardMaterial3D_gripper")
@@ -102,16 +103,17 @@ bottom_radius = 0.07
 height = 0.05
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tray_bed"]
-albedo_color = Color(0.16, 0.18, 0.21, 1)
-roughness = 0.5
+albedo_color = Color(0.13, 0.15, 0.18, 1)
+roughness = 0.58
 
 [sub_resource type="BoxMesh" id="BoxMesh_tray_bed"]
 material = SubResource("StandardMaterial3D_tray_bed")
 size = Vector3(0.7, 0.02, 0.85)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tray_rail"]
-albedo_color = Color(0.3, 0.34, 0.38, 1)
-metallic = 0.8
+albedo_color = Color(0.35, 0.39, 0.44, 1)
+metallic = 0.82
+roughness = 0.3
 
 [sub_resource type="BoxMesh" id="BoxMesh_tray_rail_side"]
 material = SubResource("StandardMaterial3D_tray_rail")
@@ -150,6 +152,92 @@ inner_radius = 0.4
 outer_radius = 0.46
 rings = 32
 ring_segments = 16
+
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_chassis_panel"]
+albedo_color = Color(0.115, 0.135, 0.165, 1)
+metallic = 0.72
+roughness = 0.34
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_trim"]
+albedo_color = Color(0.02, 0.028, 0.038, 1)
+metallic = 0.75
+roughness = 0.28
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_rubber"]
+albedo_color = Color(0.025, 0.03, 0.035, 1)
+metallic = 0.08
+roughness = 0.83
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hub"]
+albedo_color = Color(0.22, 0.25, 0.29, 1)
+metallic = 0.9
+roughness = 0.24
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_sensor"]
+albedo_color = Color(0.035, 0.16, 0.22, 1)
+metallic = 0.42
+roughness = 0.12
+emission_enabled = true
+emission = Color(0.0, 0.24, 0.34, 1)
+emission_energy_multiplier = 0.65
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_warning"]
+albedo_color = Color(0.85, 0.26, 0.035, 1)
+metallic = 0.35
+roughness = 0.38
+
+[sub_resource type="BoxMesh" id="BoxMesh_lower_bumper"]
+material = SubResource("StandardMaterial3D_trim")
+size = Vector3(1.0, 0.10, 1.47)
+
+[sub_resource type="BoxMesh" id="BoxMesh_upper_deck"]
+material = SubResource("StandardMaterial3D_chassis_panel")
+size = Vector3(0.86, 0.055, 1.20)
+
+[sub_resource type="BoxMesh" id="BoxMesh_front_face"]
+material = SubResource("StandardMaterial3D_chassis_panel")
+size = Vector3(0.84, 0.12, 0.055)
+
+[sub_resource type="BoxMesh" id="BoxMesh_side_panel"]
+material = SubResource("StandardMaterial3D_chassis_panel")
+size = Vector3(0.035, 0.17, 1.05)
+
+[sub_resource type="BoxMesh" id="BoxMesh_panel_trim"]
+material = SubResource("StandardMaterial3D_trim")
+size = Vector3(0.012, 0.018, 1.07)
+
+[sub_resource type="BoxMesh" id="BoxMesh_status_window"]
+material = SubResource("StandardMaterial3D_sensor")
+size = Vector3(0.32, 0.045, 0.018)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_drive_wheel"]
+material = SubResource("StandardMaterial3D_rubber")
+top_radius = 0.15
+bottom_radius = 0.15
+height = 0.075
+radial_segments = 32
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_wheel_hub"]
+material = SubResource("StandardMaterial3D_hub")
+top_radius = 0.075
+bottom_radius = 0.075
+height = 0.078
+radial_segments = 24
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_sensor"]
+material = SubResource("StandardMaterial3D_sensor")
+top_radius = 0.12
+bottom_radius = 0.14
+height = 0.035
+radial_segments = 32
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_joint_cap"]
+material = SubResource("StandardMaterial3D_hub")
+top_radius = 0.115
+bottom_radius = 0.115
+height = 0.06
+radial_segments = 24
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_chassis"]
 size = Vector3(0.95, 0.32, 1.45)
@@ -386,6 +474,89 @@ mesh = SubResource("BoxMesh_pad")
 
 [node name="GrippedBoxSocket" type="Node3D" parent="RoboticArm/ShoulderJoint/ElbowJoint/WristJoint"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.22, 0)
+
+
+
+; --- Visual detail layer: purely decorative, no gameplay/collision dependencies ---
+[node name="LowerBumper" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.07, 0)
+mesh = SubResource("BoxMesh_lower_bumper")
+
+[node name="UpperDeckPanel" type="MeshInstance3D" parent="Chassis"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.16, 0.02)
+mesh = SubResource("BoxMesh_upper_deck")
+
+[node name="FrontFace" type="MeshInstance3D" parent="Chassis"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.015, -0.72)
+mesh = SubResource("BoxMesh_front_face")
+
+[node name="SidePanelLeft" type="MeshInstance3D" parent="Chassis"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.472, 0.02, 0.02)
+mesh = SubResource("BoxMesh_side_panel")
+
+[node name="SidePanelRight" type="MeshInstance3D" parent="Chassis"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.472, 0.02, 0.02)
+mesh = SubResource("BoxMesh_side_panel")
+
+[node name="PanelTrimLeft" type="MeshInstance3D" parent="Chassis"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.39, 0.305, 0.02)
+mesh = SubResource("BoxMesh_panel_trim")
+
+[node name="PanelTrimRight" type="MeshInstance3D" parent="Chassis"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.39, 0.305, 0.02)
+mesh = SubResource("BoxMesh_panel_trim")
+
+[node name="FrontStatusWindow" type="MeshInstance3D" parent="Chassis"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.17, -0.753)
+mesh = SubResource("BoxMesh_status_window")
+
+[node name="TopLidarHousing" type="MeshInstance3D" parent="Chassis"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.21, 0.0)
+mesh = SubResource("CylinderMesh_sensor")
+
+[node name="DriveWheelFL" type="MeshInstance3D" parent="."]
+transform = Transform3D(0, -1, 0, 1, 0, 0, 0, 0, 1, -0.505, 0.16, -0.42)
+mesh = SubResource("CylinderMesh_drive_wheel")
+
+[node name="DriveWheelFR" type="MeshInstance3D" parent="."]
+transform = Transform3D(0, -1, 0, 1, 0, 0, 0, 0, 1, 0.505, 0.16, -0.42)
+mesh = SubResource("CylinderMesh_drive_wheel")
+
+[node name="DriveWheelRL" type="MeshInstance3D" parent="."]
+transform = Transform3D(0, -1, 0, 1, 0, 0, 0, 0, 1, -0.505, 0.16, 0.42)
+mesh = SubResource("CylinderMesh_drive_wheel")
+
+[node name="DriveWheelRR" type="MeshInstance3D" parent="."]
+transform = Transform3D(0, -1, 0, 1, 0, 0, 0, 0, 1, 0.505, 0.16, 0.42)
+mesh = SubResource("CylinderMesh_drive_wheel")
+
+[node name="WheelHubFL" type="MeshInstance3D" parent="."]
+transform = Transform3D(0, -1, 0, 1, 0, 0, 0, 0, 1, -0.546, 0.16, -0.42)
+mesh = SubResource("CylinderMesh_wheel_hub")
+
+[node name="WheelHubFR" type="MeshInstance3D" parent="."]
+transform = Transform3D(0, -1, 0, 1, 0, 0, 0, 0, 1, 0.546, 0.16, -0.42)
+mesh = SubResource("CylinderMesh_wheel_hub")
+
+[node name="WheelHubRL" type="MeshInstance3D" parent="."]
+transform = Transform3D(0, -1, 0, 1, 0, 0, 0, 0, 1, -0.546, 0.16, 0.42)
+mesh = SubResource("CylinderMesh_wheel_hub")
+
+[node name="WheelHubRR" type="MeshInstance3D" parent="."]
+transform = Transform3D(0, -1, 0, 1, 0, 0, 0, 0, 1, 0.546, 0.16, 0.42)
+mesh = SubResource("CylinderMesh_wheel_hub")
+
+[node name="ShoulderCap" type="MeshInstance3D" parent="RoboticArm/ShoulderJoint"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, 0)
+mesh = SubResource("CylinderMesh_joint_cap")
+
+[node name="ElbowCap" type="MeshInstance3D" parent="RoboticArm/ShoulderJoint/ElbowJoint"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.015, 0)
+mesh = SubResource("CylinderMesh_joint_cap")
+
+[node name="WristCap" type="MeshInstance3D" parent="RoboticArm/ShoulderJoint/ElbowJoint/WristJoint"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, 0)
+mesh = SubResource("CylinderMesh_joint_cap")
 
 [node name="TargetReticle" type="Node3D" parent="."]
 visible = false
