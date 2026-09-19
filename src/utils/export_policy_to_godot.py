@@ -64,7 +64,7 @@ def export_ppo_model(model_path: str, output_path: str) -> None:
     # Manual forward
     h1 = np.tanh(np.dot(np.array(w0), dummy_input) + np.array(b0))
     h2 = np.tanh(np.dot(np.array(w1), h1) + np.array(b1))
-    pred_manual = np.dot(np.array(w2), h2) + np.array(b2)
+    pred_manual = np.clip(np.dot(np.array(w2), h2) + np.array(b2), -1.0, 1.0)
 
     diff = np.max(np.abs(pred_sb3 - pred_manual))
     print(f"✔ Numerical Parity Verified! Max difference: {diff:.8e}")

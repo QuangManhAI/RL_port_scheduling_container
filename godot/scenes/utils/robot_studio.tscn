@@ -1,0 +1,88 @@
+[gd_scene load_steps=10 format=3 uid="uid://dmx_robot_studio_001"]
+
+[ext_resource type="Script" path="res://scripts/utils/robot_studio.gd" id="1_studio"]
+[ext_resource type="PackedScene" path="res://scenes/entities/amr_robot.tscn" id="2_robot"]
+
+[sub_resource type="Environment" id="Environment_studio"]
+background_mode = 1
+background_color = Color(0.11, 0.12, 0.15, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.32, 0.35, 0.42, 1)
+ambient_light_energy = 1.0
+tonemap_mode = 2
+ssr_enabled = true
+ssao_enabled = true
+ssao_radius = 0.8
+ssao_intensity = 1.6
+glow_enabled = true
+glow_intensity = 0.6
+glow_bloom = 0.15
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
+albedo_color = Color(0.18, 0.20, 0.24, 1)
+metallic = 0.25
+roughness = 0.35
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_pedestal"]
+material = SubResource("StandardMaterial3D_floor")
+top_radius = 3.5
+bottom_radius = 3.7
+height = 0.04
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_floor"]
+height = 0.04
+radius = 3.7
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_accent_ring"]
+albedo_color = Color(0.0, 0.85, 1.0, 0.7)
+emission_enabled = true
+emission = Color(0.0, 0.85, 1.0, 1)
+emission_energy_multiplier = 1.2
+
+[sub_resource type="TorusMesh" id="TorusMesh_ring"]
+material = SubResource("StandardMaterial3D_accent_ring")
+inner_radius = 3.2
+outer_radius = 3.25
+rings = 64
+ring_segments = 32
+
+[node name="RobotStudio" type="Node3D"]
+script = ExtResource("1_studio")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_studio")
+
+[node name="KeyLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.819152, -0.40558, 0.395729, 0, 0.694658, 0.71934, -0.573576, -0.589246, 0.56903, 4, 8, 4)
+light_color = Color(1, 0.97, 0.92, 1)
+light_energy = 1.6
+shadow_enabled = true
+
+[node name="RimLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(-0.707107, 0.5, -0.5, 0, 0.707107, 0.707107, 0.707107, 0.5, -0.5, -5, 6, -5)
+light_color = Color(0.4, 0.75, 1, 1)
+light_energy = 1.2
+
+[node name="FillLight" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 2.5, -3)
+light_color = Color(0.85, 0.92, 1, 1)
+light_energy = 0.8
+omni_range = 8.0
+
+[node name="StudioFloor" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.02, 0)
+mesh = SubResource("CylinderMesh_pedestal")
+
+[node name="FloorAccentRing" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.005, 0)
+mesh = SubResource("TorusMesh_ring")
+
+[node name="AMR_Robot" parent="." instance=ExtResource("2_robot")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+
+[node name="CameraGimbal" type="Node3D" parent="."]
+
+[node name="Camera3D" type="Camera3D" parent="CameraGimbal"]
+transform = Transform3D(1, 0, 0, 0, 0.866025, 0.5, 0, -0.5, 0.866025, 0, 2, 4)
+fov = 48.0
+current = true

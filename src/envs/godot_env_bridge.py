@@ -139,12 +139,14 @@ class GodotEnvBridge:
         ticks_per_step: int = 4,
         headless: bool = True,
         autostart: bool = True,
+        extra_args: Optional[List[str]] = None,
     ) -> None:
         self.scene_path = scene_path
         self.port = port
         self.godot_bin = godot_bin or find_godot_binary()
         self.ticks_per_step = ticks_per_step
         self.headless = headless
+        self.extra_args = extra_args or []
         self.process: Optional[subprocess.Popen] = None
         self.client: Optional[GodotTCPClient] = None
 
@@ -185,6 +187,8 @@ class GodotEnvBridge:
         ]
         if self.headless:
             cmd.insert(1, "--headless")
+        if self.extra_args:
+            cmd.extend(self.extra_args)
 
         # Start Godot detached from console
         self.process = subprocess.Popen(
